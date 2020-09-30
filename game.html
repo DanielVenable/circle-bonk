@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Muliplayer game</title>
+	<style>
+		span {
+			font-style: italic;
+		}
+		#start:not([hidden]), #play:not([hidden]) {
+			display: flex;
+			justify-content: center;
+		}
+		#chatbox {
+			border: 1px solid black;
+			display: flex;
+			flex-direction: column-reverse;
+			position: absolute;
+			top: 0;
+			bottom: 20px;
+			left: 0;
+			right: 0;
+			overflow: auto;
+		}
+		#chatcontainer {
+			position: relative;
+			width: 25%;
+		}
+		canvas {
+			width: 75%;
+			border: 5px solid rgb(0, 255, 0);
+		}
+		#chatinput {
+			position: absolute;
+			bottom: 0;
+			width: -moz-available;
+			width: -webkit-fill-available;
+		}
+		#chatbox p {
+			margin: 0.5em;
+		}
+	</style>
+</head>
+
+<body>
+	<div id="play" hidden>
+		<canvas width="3000" height="2000"></canvas>
+		<div id="chatcontainer">
+			<div id="chatbox"></div>
+			<input id="chatinput">
+		</div>
+	</div>
+	<div id="start">
+		<label>Choose a display name: <input id="displayname"></label>
+	</div>
+</body>
+
+<script>
+	'use strict';
+
+	let keys = new Set([
+		'ArrowUp',    'KeyW',
+		'ArrowLeft',  'KeyA',
+		'ArrowDown',  'KeyS',
+		'ArrowRight', 'KeyD'
+	]), keys_down = new Set;
+
+	class Game {
+		players = new Map;
+
+		constructor(canvas, ws) {
+			this.ctx = canvas.getContext('2d');
+			this.ctx.imageSmoothingEnabled = false;
+
+			document.addEventListener('keydown', e => handle_key(e, true));
+			document.addEventListener('keyup', e => handle_key(e, false));
+
+			function handle_key({ code }, is_down) {
+				if (!keys.has(code)) return;
+				keys_down[is_down ? 'add' : 'delete'](code);
+				let x = 0, y = 0;
+				if (keys_down.has('ArrowUp')    || keys_down.has('KeyW')) y--;
+				if (keys_down.has('ArrowLeft')  || keys_down.has('KeyA')) x--;
+				if (keys_down.has('ArrowDown')  || keys_down.has('KeyS')) y++;
+				if (keys_down.has('ArrowRight') || keys_down.has('KeyD')) x++;
+				ws.send(JSON.stringify({ type: 'position', x, y }));
+			}
+		}
+
+		update() {
+			this.ctx.clearRect(0, 0, 3000, 2000);
+			for (const position of this.players.values()) {
+				this.ctx.fillRect(...position, 100, 100);
+			}
+		}
+	}
+
+	const [chatbox, chatinput, chatcontainer, usernameinput,
+			play, start_screen, canvas] =
+		['chatbox', 'chatinput', 'chatcontainer', 'displayname',
+			'play', 'start', 'canvas']
+			.map(document.getElementById.bind(document));
+
+
+	usernameinput.addEventListener('keypress', ({ key }) => {
+		if (key === 'Enter') start();
+	});
+
+	function start() {
+		play.hidden = false;
+		start_screen.hidden = true;
+		const ws = new WebSocket(
+			`ws://${
+				location.hostname
+			}:${
+				window.location.port ||
+					(window.location.protocol === 'http:' ? '80' : '443')
+			}/?username=${
+				encodeURIComponent(usernameinput.value)
+			}`);
+
+		const game = new Game(document.querySelector('canvas'), ws);
+
+		ws.onmessage = ({ data }) => {
+			const { type, message, from, id } = JSON.parse(data);
+			if (type === 'message') {
+				append_chat(message, String(from));
+			} else if (type === 'position') {
+				game.players.set(id, message);
+				game.update();
+			} else if (type === 'id') {
+				game.id = id;
+			}
+		}
+
+		chatinput.addEventListener('keypress', ({ key }) => {
+			if (key === 'Enter') {
+				ws.send(JSON.stringify({
+					type: 'message',
+					message: chatinput.value
+				}));
+				append_chat(chatinput.value);
+				chatinput.value = '';
+			}
+		});
+
+		function append_chat(text, username) {
+			const elem = document.createElement('p');
+			const name = document.createElement(username === undefined ? 'span' : 'b');
+			name.textContent = (username === undefined ? '(You)' : username) + ': ';
+			elem.appendChild(name);
+			elem.insertAdjacentText('beforeend', text);
+			chatbox.prepend(elem);
+		}
+	}
+</script>
+
+</html>
