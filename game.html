@@ -60,6 +60,16 @@
 <script>
 	'use strict';
 
+	const [chatbox, chatinput, usernameinput, play, start_screen] =
+		['chatbox', 'chatinput', 'displayname', 'play', 'start']
+			.map(document.getElementById.bind(document));
+
+	usernameinput.value = localStorage.display_name || '';
+	usernameinput.select();
+	usernameinput.addEventListener('keypress', ({ key }) => {
+		if (key === 'Enter') start();
+	});
+
 	let keys = new Set([
 		'ArrowUp',    'KeyW',
 		'ArrowLeft',  'KeyA',
@@ -97,17 +107,6 @@
 		}
 	}
 
-	const [chatbox, chatinput, chatcontainer, usernameinput,
-			play, start_screen, canvas] =
-		['chatbox', 'chatinput', 'chatcontainer', 'displayname',
-			'play', 'start', 'canvas']
-			.map(document.getElementById.bind(document));
-
-
-	usernameinput.addEventListener('keypress', ({ key }) => {
-		if (key === 'Enter') start();
-	});
-
 	function start() {
 		play.hidden = false;
 		start_screen.hidden = true;
@@ -118,7 +117,7 @@
 				window.location.port ||
 					(window.location.protocol === 'http:' ? '80' : '443')
 			}/?username=${
-				encodeURIComponent(usernameinput.value)
+				encodeURIComponent(localStorage.display_name = usernameinput.value)
 			}`);
 
 		const game = new Game(document.querySelector('canvas'), ws);
