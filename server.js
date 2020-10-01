@@ -12,7 +12,7 @@ class Game {
 	players = new Set;
 
 	constructor(ws, req) {
-		this.ticker = setInterval(this.tick.bind(this), 100);
+		this.ticker = setInterval(this.tick.bind(this), Game.tick_length);
 		if (ws && req) {
 			const player = this.add(ws, req);
 			ws.on('close', () => this.players.delete(player));
@@ -49,6 +49,7 @@ class Game {
 	static max_players = Infinity;
 	static valid_speeds = new Set([-1, 0, 1]);
 	static speed = 10;
+	static tick_length = 50;
 }
 
 class Player {
