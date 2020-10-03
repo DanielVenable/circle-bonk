@@ -20,7 +20,10 @@ class Game {
 		for (const player of this.players) {
 			if (!send_to_me && player === from) continue;
 			const obj = { type, message, id: from.id };
-			if (send_username) obj.username = from.username;
+			if (send_username) {
+				obj.username = from.username;
+				obj.color = from.color;
+			}
 			player.ws.send(JSON.stringify(obj));
 		}
 	}
@@ -39,7 +42,7 @@ class Game {
 	}
 
 	add(ws, req) {
-		return new Player(ws, this, parse(req.url, true).query.username);
+		new Player(ws, this, parse(req.url, true).query.username);
 	}
 
 	remove(player) {
@@ -56,6 +59,7 @@ class Game {
 class Player {
 	position = [0, 0];
 	speed = [0, 0];
+	color = random_color();
 
 	constructor(ws, game, username) {
 		this.username = username;
@@ -92,7 +96,8 @@ class Player {
 				type: 'position',
 				id: player.id,
 				message: player.position,
-				username: player.username
+				username: player.username,
+				color: player.color
 			}));
 		}
 	}
@@ -121,3 +126,7 @@ ws_server.on('connection', (ws, req) => {
 	}
 	games.push(new Game(ws, req));
 });
+
+function random_color() {
+	return `hsl(${360 * Math.random()},100%,${Math.random() * 50 + 20}%)`;
+}

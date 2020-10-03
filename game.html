@@ -117,17 +117,18 @@
 			this.ctx.clearRect(0, 0, 2 * max_x, 2 * max_y);
 			this.ctx.restore();
 
-			for (const { position } of this.players.values()) {
+			for (const { position, color } of this.players.values()) {
 				if (!position) continue;
+				this.ctx.fillStyle = color || '#000000';
 				this.ctx.beginPath();
 				this.ctx.arc(...position, 50, 0, 2 * Math.PI);
 				this.ctx.fill();
 			}
 
-			this.ctx.fillStyle = '#0000ff';
 			this.ctx.globalAlpha = 0.75;
-			for (const { username, position } of this.players.values()) {
+			for (const { username, position, color } of this.players.values()) {
 				if (!position || !username) continue;
+				this.ctx.fillStyle = color || '#000000';
 				this.ctx.fillText(username, position[0], position[1] - 60);
 			}
 			this.ctx.fillStyle = '#000000';
@@ -151,13 +152,14 @@
 		const game = new Game(document.querySelector('canvas'), ws);
 
 		ws.onmessage = ({ data }) => {
-			const { type, message, username, id } = JSON.parse(data);
+			const { type, message, username, color, id } = JSON.parse(data);
 			if (type === 'message') {
 				append_chat(message, game.players.get(id).username);
 			} else if (type === 'position') {
 				if (username !== undefined) {
 					game.players.set_property(id, 'username', username);
 				}
+				if (color) game.players.set_property(id, 'color', color);
 				if (id === game.my_id) {
 					game.ctx.setTransform(1, 0, 0, 1,
 						max_x - message[0],
