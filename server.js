@@ -13,18 +13,15 @@ class Game {
 
 	constructor(ws, req) {
 		this.ticker = setInterval(this.tick.bind(this), Game.tick_length);
-		if (ws && req) {
-			const player = this.add(ws, req);
-			ws.on('close', () => this.players.delete(player));
-		}
+		if (ws && req) this.add(ws, req);
 	}
 
-	send_to_all(type, from, message, send_to_me) {
+	send_to_all(type, from, message = Symbol(), send_to_me = false, send_username = false) {
 		for (const player of this.players) {
 			if (!send_to_me && player === from) continue;
-			player.ws.send(JSON.stringify({
-				type, from: from.username, id: from.id, message
-			}));
+			const obj = { type, message, id: from.id };
+			if (send_username) obj.username = from.username;
+			player.ws.send(JSON.stringify(obj));
 		}
 	}
 
@@ -34,6 +31,7 @@ class Game {
 
 	tick() {
 		for (const player of this.players) {
+			if (player.speed[0] === 0 && player.speed[1] === 0) continue;
 			player.position[0] += player.speed[0];
 			player.position[1] += player.speed[1];
 			this.send_to_all('position', player, player.position, true);
@@ -41,9 +39,12 @@ class Game {
 	}
 
 	add(ws, req) {
-		const player = new Player(ws, this, parse(req.url, true).query.username);
-		this.players.add(player);
-		return player;
+		return new Player(ws, this, parse(req.url, true).query.username);
+	}
+
+	remove(player) {
+		this.players.delete(player);
+		this.send_to_all('bye', player);
 	}
 
 	static max_players = Infinity;
@@ -72,7 +73,7 @@ class Player {
 				return;
 			}
 			if (data.type === 'message') {
-				game.send_to_all('message', this, String(data.message), false);
+				game.send_to_all('message', this, String(data.message));
 			} else if (
 				data.type === 'position' &&
 				Game.valid_speeds.has(data.x) &&
@@ -80,7 +81,23 @@ class Player {
 				this.speed = [data.x * Game.speed, data.y * Game.speed];
 			}
 		});
+
+		ws.on('close', () => game.remove(this));
+
+		game.players.add(this);
+		game.send_to_all('position', this, this.position, false, true);
+
+		for (const player of game.players) {
+			ws.send(JSON.stringify({
+				type: 'position',
+				id: player.id,
+				message: player.position,
+				username: player.username
+			}));
+		}
 	}
+
+	static size = 50;
 }
 
 const server = createServer(async (req, res) => {

@@ -4,7 +4,7 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Muliplayer game</title>
+	<title>Multiplayer game</title>
 	<style>
 		span {
 			font-style: italic;
@@ -62,7 +62,16 @@
 
 	const [chatbox, chatinput, usernameinput, play, start_screen] =
 		['chatbox', 'chatinput', 'displayname', 'play', 'start']
-			.map(document.getElementById.bind(document));
+			.map(document.getElementById.bind(document)),
+		keys = new Set([
+			'ArrowUp',
+			'ArrowLeft',
+			'ArrowDown',
+			'ArrowRight'
+		]),
+		keys_down = new Set,
+		max_y = 2000 / 2,
+		max_x = 3000 / 2;
 
 	usernameinput.value = localStorage.display_name || '';
 	usernameinput.select();
@@ -70,40 +79,59 @@
 		if (key === 'Enter') start();
 	});
 
-	let keys = new Set([
-		'ArrowUp',    'KeyW',
-		'ArrowLeft',  'KeyA',
-		'ArrowDown',  'KeyS',
-		'ArrowRight', 'KeyD'
-	]), keys_down = new Set;
-
 	class Game {
 		players = new Map;
 
 		constructor(canvas, ws) {
 			this.ctx = canvas.getContext('2d');
 			this.ctx.imageSmoothingEnabled = false;
+			this.ctx.textAlign = 'center';
+			this.ctx.font = '50px arial';
 
 			document.addEventListener('keydown', e => handle_key(e, true));
 			document.addEventListener('keyup', e => handle_key(e, false));
 
-			function handle_key({ code }, is_down) {
-				if (!keys.has(code)) return;
-				keys_down[is_down ? 'add' : 'delete'](code);
-				let x = 0, y = 0;
-				if (keys_down.has('ArrowUp')    || keys_down.has('KeyW')) y--;
-				if (keys_down.has('ArrowLeft')  || keys_down.has('KeyA')) x--;
-				if (keys_down.has('ArrowDown')  || keys_down.has('KeyS')) y++;
-				if (keys_down.has('ArrowRight') || keys_down.has('KeyD')) x++;
-				ws.send(JSON.stringify({ type: 'position', x, y }));
+			this.players.set_property = function (id, property, value) {
+				const player = this.get(id);
+				if (player) player[property] = value;
+				else this.set(id, { [property]: value });
+			}
+
+			function handle_key(event, is_down) {
+				if (keys.has(event.code)) {
+					event.preventDefault();
+					keys_down[is_down ? 'add' : 'delete'](event.code);
+					let x = 0, y = 0;
+					if (keys_down.has('ArrowUp'))    y--;
+					if (keys_down.has('ArrowLeft'))  x--;
+					if (keys_down.has('ArrowDown'))  y++;
+					if (keys_down.has('ArrowRight')) x++;
+					ws.send(JSON.stringify({ type: 'position', x, y }));
+				} else if (event.target !== chatinput) chatinput.select();
 			}
 		}
 
 		update() {
-			this.ctx.clearRect(0, 0, 3000, 2000);
-			for (const position of this.players.values()) {
-				this.ctx.fillRect(...position, 100, 100);
+			this.ctx.save();
+			this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+			this.ctx.clearRect(0, 0, 2 * max_x, 2 * max_y);
+			this.ctx.restore();
+
+			for (const { position } of this.players.values()) {
+				if (!position) continue;
+				this.ctx.beginPath();
+				this.ctx.arc(...position, 50, 0, 2 * Math.PI);
+				this.ctx.fill();
 			}
+
+			this.ctx.fillStyle = '#0000ff';
+			this.ctx.globalAlpha = 0.75;
+			for (const { username, position } of this.players.values()) {
+				if (!position || !username) continue;
+				this.ctx.fillText(username, position[0], position[1] - 60);
+			}
+			this.ctx.fillStyle = '#000000';
+			this.ctx.globalAlpha = 1;
 		}
 	}
 
@@ -123,14 +151,26 @@
 		const game = new Game(document.querySelector('canvas'), ws);
 
 		ws.onmessage = ({ data }) => {
-			const { type, message, from, id } = JSON.parse(data);
+			const { type, message, username, id } = JSON.parse(data);
 			if (type === 'message') {
-				append_chat(message, String(from));
+				append_chat(message, game.players.get(id).username);
 			} else if (type === 'position') {
-				game.players.set(id, message);
+				if (username !== undefined) {
+					game.players.set_property(id, 'username', username);
+				}
+				if (id === game.my_id) {
+					game.ctx.setTransform(1, 0, 0, 1,
+						max_x - message[0],
+						max_y - message[1]);
+				}
+				game.players.set_property(id, 'position', message);
 				game.update();
 			} else if (type === 'id') {
-				game.id = id;
+				game.my_id = id;
+				game.players.set_property(id, 'username', usernameinput.value);
+			} else if (type === 'bye') {
+				game.players.delete(id);
+				game.update();
 			}
 		}
 
