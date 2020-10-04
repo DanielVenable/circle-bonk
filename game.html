@@ -41,37 +41,42 @@
 		#chatbox p {
 			margin: 0.5em;
 		}
+		#play.fade {
+			animation: fade 1s;
+		}
+		@keyframes fade {
+			100% {opacity: 0;}
+		}
 	</style>
 </head>
 
 <body>
 	<div id="play" hidden>
-		<canvas width="3000" height="2000"></canvas>
+		<canvas width="3000" height="2000" id="canvas"></canvas>
 		<div id="chatcontainer">
 			<div id="chatbox"></div>
 			<input id="chatinput">
 		</div>
 	</div>
 	<div id="start">
-		<label>Choose a display name: <input id="displayname"></label>
+		<label>Choose a display name:
+			<input id="displayname" maxlength="30">
+		</label>
 	</div>
 </body>
 
 <script>
 	'use strict';
 
-	const [chatbox, chatinput, usernameinput, play, start_screen] =
-		['chatbox', 'chatinput', 'displayname', 'play', 'start']
+	const [chatbox, chatinput, usernameinput, play, start_screen, canvas] =
+		['chatbox', 'chatinput', 'displayname', 'play', 'start', 'canvas']
 			.map(document.getElementById.bind(document)),
 		keys = new Set([
 			'ArrowUp',
 			'ArrowLeft',
 			'ArrowDown',
 			'ArrowRight'
-		]),
-		keys_down = new Set,
-		max_y = 2000 / 2,
-		max_x = 3000 / 2;
+		]);
 
 	usernameinput.value = localStorage.display_name || '';
 	usernameinput.select();
@@ -79,62 +84,7 @@
 		if (key === 'Enter') start();
 	});
 
-	class Game {
-		players = new Map;
-
-		constructor(canvas, ws) {
-			this.ctx = canvas.getContext('2d');
-			this.ctx.imageSmoothingEnabled = false;
-			this.ctx.textAlign = 'center';
-			this.ctx.font = '50px arial';
-
-			document.addEventListener('keydown', e => handle_key(e, true));
-			document.addEventListener('keyup', e => handle_key(e, false));
-
-			this.players.set_property = function (id, property, value) {
-				const player = this.get(id);
-				if (player) player[property] = value;
-				else this.set(id, { [property]: value });
-			}
-
-			function handle_key(event, is_down) {
-				if (keys.has(event.code)) {
-					event.preventDefault();
-					keys_down[is_down ? 'add' : 'delete'](event.code);
-					let x = 0, y = 0;
-					if (keys_down.has('ArrowUp'))    y--;
-					if (keys_down.has('ArrowLeft'))  x--;
-					if (keys_down.has('ArrowDown'))  y++;
-					if (keys_down.has('ArrowRight')) x++;
-					ws.send(JSON.stringify({ type: 'position', x, y }));
-				} else if (event.target !== chatinput) chatinput.select();
-			}
-		}
-
-		update() {
-			this.ctx.save();
-			this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-			this.ctx.clearRect(0, 0, 2 * max_x, 2 * max_y);
-			this.ctx.restore();
-
-			for (const { position, color } of this.players.values()) {
-				if (!position) continue;
-				this.ctx.fillStyle = color || '#000000';
-				this.ctx.beginPath();
-				this.ctx.arc(...position, 50, 0, 2 * Math.PI);
-				this.ctx.fill();
-			}
-
-			this.ctx.globalAlpha = 0.75;
-			for (const { username, position, color } of this.players.values()) {
-				if (!position || !username) continue;
-				this.ctx.fillStyle = color || '#000000';
-				this.ctx.fillText(username, position[0], position[1] - 60);
-			}
-			this.ctx.fillStyle = '#000000';
-			this.ctx.globalAlpha = 1;
-		}
-	}
+	const scale = 10;
 
 	function start() {
 		play.hidden = false;
@@ -149,7 +99,29 @@
 				encodeURIComponent(localStorage.display_name = usernameinput.value)
 			}`);
 
-		const game = new Game(document.querySelector('canvas'), ws);
+		const keys_down = new Set;
+
+		const game = {
+			players: new Map,
+			walls: []
+		};
+			
+		game.ctx = canvas.getContext('2d');
+		game.ctx.imageSmoothingEnabled = false;
+		game.ctx.textAlign = 'center';
+		game.ctx.font = '5px arial';
+
+		const keydown_listener = e => handle_key(e, true),
+			keyup_listener = e => handle_key(e, false);
+		
+		document.addEventListener('keydown', keydown_listener);
+		document.addEventListener('keyup', keyup_listener);
+
+		game.players.set_property = function (id, property, value) {
+			const player = this.get(id);
+			if (player) player[property] = value;
+			else this.set(id, { [property]: value });
+		}
 
 		ws.onmessage = ({ data }) => {
 			const { type, message, username, color, id } = JSON.parse(data);
@@ -161,22 +133,39 @@
 				}
 				if (color) game.players.set_property(id, 'color', color);
 				if (id === game.my_id) {
-					game.ctx.setTransform(1, 0, 0, 1,
-						max_x - message[0],
-						max_y - message[1]);
+					game.ctx.setTransform(scale, 0, 0, scale,
+						canvas.width  / 2 - message[0] * scale,
+						canvas.height / 2 - message[1] * scale);
 				}
 				game.players.set_property(id, 'position', message);
-				game.update();
+				update();
 			} else if (type === 'id') {
 				game.my_id = id;
 				game.players.set_property(id, 'username', usernameinput.value);
 			} else if (type === 'bye') {
 				game.players.delete(id);
-				game.update();
+				update();
+			} else if (type === 'wall') {
+				game.walls = message;
+				update();
+			} else if (type === 'die') {
+				if (id === game.my_id) {
+					play.classList.add('fade');
+					ws.onmessage = null;
+					document.removeEventListener('keydown', keydown_listener);
+					document.removeEventListener('keyup', keyup_listener);
+					chatinput.removeEventListener('keypress', chat_listener);
+					setTimeout(() => {
+						play.classList.remove('fade');
+						play.hidden = true;
+						start_screen.hidden = false;
+						usernameinput.select();
+					}, 1000);
+				}
 			}
 		}
 
-		chatinput.addEventListener('keypress', ({ key }) => {
+		function chat_listener({ key }) {
 			if (key === 'Enter') {
 				ws.send(JSON.stringify({
 					type: 'message',
@@ -185,7 +174,9 @@
 				append_chat(chatinput.value);
 				chatinput.value = '';
 			}
-		});
+		}
+
+		chatinput.addEventListener('keypress', chat_listener);
 
 		function append_chat(text, username) {
 			const elem = document.createElement('p');
@@ -194,6 +185,47 @@
 			elem.appendChild(name);
 			elem.insertAdjacentText('beforeend', text);
 			chatbox.prepend(elem);
+		}
+
+		function handle_key(event, is_down) {
+			if (keys.has(event.code)) {
+				event.preventDefault();
+				keys_down[is_down ? 'add' : 'delete'](event.code);
+				let x = 0, y = 0;
+				if (keys_down.has('ArrowUp'))    y--;
+				if (keys_down.has('ArrowLeft'))  x--;
+				if (keys_down.has('ArrowDown'))  y++;
+				if (keys_down.has('ArrowRight')) x++;
+				ws.send(JSON.stringify({ type: 'position', x, y }));
+			} else if (event.target !== chatinput) chatinput.select();
+		}
+
+		function update() {
+			game.ctx.save();
+			game.ctx.setTransform(1, 0, 0, 1, 0, 0);
+			game.ctx.clearRect(0, 0, canvas.width, canvas.height);
+			game.ctx.restore();
+
+			for (const wall of game.walls) {
+				game.ctx.fillRect(...wall);
+			}
+
+			for (const { position, color } of game.players.values()) {
+				if (!position) continue;
+				game.ctx.fillStyle = color || '#000000';
+				game.ctx.beginPath();
+				game.ctx.arc(...position, 5, 0, 2 * Math.PI);
+				game.ctx.fill();
+			}
+
+			game.ctx.globalAlpha = 0.75;
+			for (const { username, position, color } of game.players.values()) {
+				if (!position || !username) continue;
+				game.ctx.fillStyle = color || '#000000';
+				game.ctx.fillText(username, position[0], position[1] - 6);
+			}
+			game.ctx.fillStyle = '#000000';
+			game.ctx.globalAlpha = 1;
 		}
 	}
 </script>
