@@ -61,7 +61,7 @@ class Game {
 	static max_players = Infinity;
 	static valid_speeds = new Set([-1, 0, 1]);
 	static tick_length = 50;
-	static friction = 0.75;
+	static friction = 0.95;
 }
 
 class Player {
@@ -87,11 +87,12 @@ class Player {
 			}
 			if (data.type === 'message') {
 				game.send_to_all('message', this, String(data.message));
-			} else if (
-				data.type === 'position' &&
-				Game.valid_speeds.has(data.x) &&
-				Game.valid_speeds.has(data.y)) {
-				this.accel = [data.x * Player.speed, data.y * Player.speed];
+			} else if (data.type === 'position') {
+				const norm = Math.sqrt(data.x ** 2 + data.y ** 2);
+				if (isNaN(norm)) return;
+				this.accel = [
+					data.x * Player.accel / norm || 0,
+					data.y * Player.accel / norm || 0];
 			}
 		});
 
@@ -136,7 +137,7 @@ class Player {
 
 	static radius = 5;
 	static sq_radius = Player.radius ** 2;
-	static speed = 2;
+	static accel = 0.25;
 	static max_name_length = 30;
 }
 

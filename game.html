@@ -104,7 +104,7 @@
 		const players = new Map,
 			dead_guys = new Set;
 
-		let walls = [], my_id;
+		let walls = [], my_id, angle = 0;
 
 		const ctx = canvas.getContext('2d');
 		ctx.imageSmoothingEnabled = false;
@@ -159,6 +159,7 @@
 					document.removeEventListener('keydown', keydown_listener);
 					document.removeEventListener('keyup', keyup_listener);
 					chatinput.removeEventListener('keypress', chat_listener);
+					clearInterval(turn_interval);
 					setTimeout(() => {
 						chatbox.textContent = '';
 						play.classList.remove('fade');
@@ -197,18 +198,25 @@
 			if (keys.has(event.code)) {
 				event.preventDefault();
 				keys_down[is_down ? 'add' : 'delete'](event.code);
-				let x = 0, y = 0;
-				if (keys_down.has('ArrowUp'))    y--;
-				if (keys_down.has('ArrowLeft'))  x--;
-				if (keys_down.has('ArrowDown'))  y++;
-				if (keys_down.has('ArrowRight')) x++;
-				ws.send(JSON.stringify({ type: 'position', x, y }));
+				let accel = 0;
+				if (keys_down.has('ArrowUp')) accel++;
+				if (keys_down.has('ArrowDown')) accel--;
+				ws.send(JSON.stringify({
+					type: 'position',
+					x: Math.cos(angle) * accel,
+					y: Math.sin(angle) * accel
+				}));
 			} else if (event.target !== chatinput) chatinput.select();
 		}
 
+		const turn_interval = setInterval(() => {
+			if (keys_down.has('ArrowLeft'))  angle -= Math.PI / 10;
+			if (keys_down.has('ArrowRight')) angle += Math.PI / 10;
+		}, 100);
+
 		function update() {
 			ctx.save();
-			ctx.setTransform(1, 0, 0, 1, 0, 0);
+			ctx.resetTransform();
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 			ctx.restore();
 
@@ -233,6 +241,15 @@
 			}
 			ctx.fillStyle = '#000000';
 			ctx.globalAlpha = 1;
+
+			const me = players.get(my_id);
+			if (me) {
+				const [x, y] = players.get(my_id).position;
+				ctx.beginPath();
+				ctx.moveTo(x, y);
+				ctx.lineTo(x + Math.cos(angle) * 5, y + Math.sin(angle) * 5);
+				ctx.stroke();
+			}
 
 			function* iterator() {
 				yield* players.values();
