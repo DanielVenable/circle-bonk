@@ -101,15 +101,15 @@
 
 		const keys_down = new Set;
 
-		const game = {
-			players: new Map,
-			walls: []
-		};
-			
-		game.ctx = canvas.getContext('2d');
-		game.ctx.imageSmoothingEnabled = false;
-		game.ctx.textAlign = 'center';
-		game.ctx.font = '5px arial';
+		const players = new Map,
+			dead_guys = new Set;
+
+		let walls = [], my_id;
+
+		const ctx = canvas.getContext('2d');
+		ctx.imageSmoothingEnabled = false;
+		ctx.textAlign = 'center';
+		ctx.font = '5px arial';
 
 		const keydown_listener = e => handle_key(e, true),
 			keyup_listener = e => handle_key(e, false);
@@ -117,7 +117,7 @@
 		document.addEventListener('keydown', keydown_listener);
 		document.addEventListener('keyup', keyup_listener);
 
-		game.players.set_property = function (id, property, value) {
+		players.set_property = function (id, property, value) {
 			const player = this.get(id);
 			if (player) player[property] = value;
 			else this.set(id, { [property]: value });
@@ -126,42 +126,48 @@
 		ws.onmessage = ({ data }) => {
 			const { type, message, username, color, id } = JSON.parse(data);
 			if (type === 'message') {
-				append_chat(message, game.players.get(id).username);
+				append_chat(message, players.get(id).username);
 			} else if (type === 'position') {
 				if (username !== undefined) {
-					game.players.set_property(id, 'username', username);
+					players.set_property(id, 'username', username);
 				}
-				if (color) game.players.set_property(id, 'color', color);
-				if (id === game.my_id) {
-					game.ctx.setTransform(scale, 0, 0, scale,
+				if (color) players.set_property(id, 'color', color);
+				if (id === my_id) {
+					ctx.setTransform(scale, 0, 0, scale,
 						canvas.width  / 2 - message[0] * scale,
 						canvas.height / 2 - message[1] * scale);
 				}
-				game.players.set_property(id, 'position', message);
+				players.set_property(id, 'position', message);
 				update();
 			} else if (type === 'id') {
-				game.my_id = id;
-				game.players.set_property(id, 'username', usernameinput.value);
+				my_id = id;
+				players.set_property(id, 'username', usernameinput.value);
 			} else if (type === 'bye') {
-				game.players.delete(id);
+				players.delete(id);
 				update();
 			} else if (type === 'wall') {
-				game.walls = message;
+				walls = message;
 				update();
 			} else if (type === 'die') {
-				if (id === game.my_id) {
+				const player = players.get(id);
+				player.death_date = Date.now();
+				dead_guys.add(player);
+				players.delete(id);
+				if (id === my_id) {
 					play.classList.add('fade');
 					ws.onmessage = null;
 					document.removeEventListener('keydown', keydown_listener);
 					document.removeEventListener('keyup', keyup_listener);
 					chatinput.removeEventListener('keypress', chat_listener);
 					setTimeout(() => {
+						chatbox.textContent = '';
 						play.classList.remove('fade');
 						play.hidden = true;
 						start_screen.hidden = false;
 						usernameinput.select();
 					}, 1000);
-				}
+				} else setTimeout(() =>	dead_guys.delete(player), 1000);
+				update();
 			}
 		}
 
@@ -201,31 +207,40 @@
 		}
 
 		function update() {
-			game.ctx.save();
-			game.ctx.setTransform(1, 0, 0, 1, 0, 0);
-			game.ctx.clearRect(0, 0, canvas.width, canvas.height);
-			game.ctx.restore();
+			ctx.save();
+			ctx.setTransform(1, 0, 0, 1, 0, 0);
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+			ctx.restore();
 
-			for (const wall of game.walls) {
-				game.ctx.fillRect(...wall);
+			for (const wall of walls) {
+				ctx.fillRect(...wall);
 			}
 
-			for (const { position, color } of game.players.values()) {
+			for (const { position, color } of iterator()) {
 				if (!position) continue;
-				game.ctx.fillStyle = color || '#000000';
-				game.ctx.beginPath();
-				game.ctx.arc(...position, 5, 0, 2 * Math.PI);
-				game.ctx.fill();
+				ctx.fillStyle = color || '#000000';
+				ctx.beginPath();
+				ctx.arc(...position, 5, 0, 2 * Math.PI);
+				ctx.fill();
 			}
 
-			game.ctx.globalAlpha = 0.75;
-			for (const { username, position, color } of game.players.values()) {
+			ctx.globalAlpha = 1;
+
+			for (const { username, position, color } of iterator()) {
 				if (!position || !username) continue;
-				game.ctx.fillStyle = color || '#000000';
-				game.ctx.fillText(username, position[0], position[1] - 6);
+				ctx.fillStyle = color || '#000000';
+				ctx.fillText(username, position[0], position[1] - 6);
 			}
-			game.ctx.fillStyle = '#000000';
-			game.ctx.globalAlpha = 1;
+			ctx.fillStyle = '#000000';
+			ctx.globalAlpha = 1;
+
+			function* iterator() {
+				yield* players.values();
+				for (const player of dead_guys) {
+					ctx.globalAlpha = 1 - (Date.now() - player.death_date) / 1000;
+					yield player;
+				}
+			}
 		}
 	}
 </script>

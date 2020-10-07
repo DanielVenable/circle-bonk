@@ -34,10 +34,16 @@ class Game {
 	}
 
 	tick() {
-		for (const player of this.players) {
-			if (player.speed[0] === 0 && player.speed[1] === 0) continue;
-			player.position[0] += player.speed[0];
-			player.position[1] += player.speed[1];
+		const arr = [...this.players];
+		for (let i = 0; i < arr.length; i++) {
+			const player = arr[i];
+			add(player.position, player.speed);
+			for (let j = i + 1; j < arr.length; j++) {
+				collide_players(player, arr[j]);
+			}
+			add(player.speed, player.accel);
+			player.speed[0] *= Game.friction;
+			player.speed[1] *= Game.friction;
 			this.send_to_all('position', player, player.position, true);
 			if (player.is_overlapping_wall()) {
 				this.send_to_all('die', player, Symbol(), true);
@@ -55,11 +61,13 @@ class Game {
 	static max_players = Infinity;
 	static valid_speeds = new Set([-1, 0, 1]);
 	static tick_length = 50;
+	static friction = 0.75;
 }
 
 class Player {
-	position = [20, 20];
+	position = [12 + Math.random() * 30, 12 + Math.random() * 30];
 	speed = [0, 0];
+	accel = [0, 0];
 	color = random_color();
 
 	constructor(ws, game, username) {
@@ -83,7 +91,7 @@ class Player {
 				data.type === 'position' &&
 				Game.valid_speeds.has(data.x) &&
 				Game.valid_speeds.has(data.y)) {
-				this.speed = [data.x * Player.speed, data.y * Player.speed];
+				this.accel = [data.x * Player.speed, data.y * Player.speed];
 			}
 		});
 
@@ -100,11 +108,11 @@ class Player {
 				username: player.username,
 				color: player.color
 			}));
-			ws.send(JSON.stringify({
-				type: 'wall',
-				message: game.terrain.walls
-			}));
 		}
+		ws.send(JSON.stringify({
+			type: 'wall',
+			message: game.terrain.walls
+		}));
 	}
 
 	is_overlapping_wall() {
@@ -159,8 +167,28 @@ function random_color() {
 	return `hsl(${360 * Math.random()},100%,${Math.random() * 50 + 20}%)`;
 }
 
+function add(v1, v2) {
+	for (let i = 0; i < v1.length; i++) {
+		v1[i] += v2[i];
+	}
+}
+
 function get_username({ url }) {
 	return String(parse(url, true).query.username);
+}
+
+function collide_players(p1, p2) {
+	const x = (p2.position[0] - p1.position[0]),
+		y = (p2.position[1] - p1.position[1]);
+	const distance = Math.sqrt(x ** 2 + y ** 2);
+	if (distance > Player.radius * 2) return;
+	const norm_x = x / distance, norm_y = y / distance;
+	const speed = (p1.speed[0] - p2.speed[0]) * norm_x + (p1.speed[1] - p2.speed[1]) * norm_y;
+	if (speed <= 0) return;
+	p1.speed[0] -= speed * norm_x;
+	p1.speed[1] -= speed * norm_y;
+	p2.speed[0] += speed * norm_x;
+	p2.speed[1] += speed * norm_y;
 }
 
 const terrains = [
