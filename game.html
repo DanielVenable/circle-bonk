@@ -41,16 +41,15 @@
 		#chatbox p {
 			margin: 0.5em;
 		}
-		#play.fade {
-			animation: fade 1s;
-		}
-		@keyframes fade {
-			100% {opacity: 0;}
-		}
 	</style>
 </head>
 
 <body>
+	<div id="start">
+		<label>Choose a display name:
+			<input id="displayname" maxlength="30">
+		</label>
+	</div>
 	<div id="play" hidden>
 		<canvas width="3000" height="2000" id="canvas"></canvas>
 		<div id="chatcontainer">
@@ -58,16 +57,12 @@
 			<input id="chatinput">
 		</div>
 	</div>
-	<div id="start">
-		<label>Choose a display name:
-			<input id="displayname" maxlength="30">
-		</label>
-	</div>
 </body>
 
 <script>
-	'use strict';
+'use strict';
 
+{
 	const [chatbox, chatinput, usernameinput, play, start_screen, canvas] =
 		['chatbox', 'chatinput', 'displayname', 'play', 'start', 'canvas']
 			.map(document.getElementById.bind(document)),
@@ -76,52 +71,60 @@
 			'ArrowLeft',
 			'ArrowDown',
 			'ArrowRight'
-		]);
+		]),
+		keys_down = new Set,
+		players = new Map,
+		dead_guys = new Set,
+		ctx = canvas.getContext('2d'),
+		scale = 10;
+
+	ctx.imageSmoothingEnabled = false;
+	ctx.textAlign = 'center';
+	ctx.font = '5px arial';
+
+	players.set_property = function (id, property, value) {
+		const player = this.get(id);
+		if (player) player[property] = value;
+		else this.set(id, { [property]: value });
+	}
 
 	usernameinput.value = localStorage.display_name || '';
 	usernameinput.select();
-	usernameinput.addEventListener('keypress', ({ key }) => {
+	usernameinput.addEventListener('keydown', ({ key }) => {
 		if (key === 'Enter') start();
 	});
 
-	const scale = 10;
+	let ws, walls = [], my_id, angle = 0, playing = false;
 
 	function start() {
+		playing = true;
+		if (!ws) setup();
+		else {
+			chatinput.disabled = false;
+			ws.send(JSON.stringify({
+				type: 'restart',
+				username: localStorage.display_name = usernameinput.value
+			}));
+		}
 		play.hidden = false;
 		start_screen.hidden = true;
-		const ws = new WebSocket(
+	}
+
+	function setup() {
+		play.hidden = false;
+		ws = new WebSocket(
 			`ws://${
 				location.hostname
 			}:${
 				window.location.port ||
 					(window.location.protocol === 'http:' ? '80' : '443')
 			}/?username=${
-				encodeURIComponent(localStorage.display_name = usernameinput.value)
+				encodeURIComponent(
+					localStorage.display_name = usernameinput.value)
 			}`);
 
-		const keys_down = new Set;
-
-		const players = new Map,
-			dead_guys = new Set;
-
-		let walls = [], my_id, angle = 0;
-
-		const ctx = canvas.getContext('2d');
-		ctx.imageSmoothingEnabled = false;
-		ctx.textAlign = 'center';
-		ctx.font = '5px arial';
-
-		const keydown_listener = e => handle_key(e, true),
-			keyup_listener = e => handle_key(e, false);
-		
-		document.addEventListener('keydown', keydown_listener);
-		document.addEventListener('keyup', keyup_listener);
-
-		players.set_property = function (id, property, value) {
-			const player = this.get(id);
-			if (player) player[property] = value;
-			else this.set(id, { [property]: value });
-		}
+		document.addEventListener('keydown', e => handle_key(e, true));
+		document.addEventListener('keyup', e => handle_key(e, false));
 
 		ws.onmessage = ({ data }) => {
 			const { type, message, username, color, id } = JSON.parse(data);
@@ -154,65 +157,15 @@
 				dead_guys.add(player);
 				players.delete(id);
 				if (id === my_id) {
-					play.classList.add('fade');
-					ws.onmessage = null;
-					document.removeEventListener('keydown', keydown_listener);
-					document.removeEventListener('keyup', keyup_listener);
-					chatinput.removeEventListener('keypress', chat_listener);
-					clearInterval(turn_interval);
-					setTimeout(() => {
-						chatbox.textContent = '';
-						play.classList.remove('fade');
-						play.hidden = true;
-						start_screen.hidden = false;
-						usernameinput.select();
-					}, 1000);
-				} else setTimeout(() =>	dead_guys.delete(player), 1000);
+					playing = false;	
+					chatinput.disabled = true;
+					start_screen.hidden = false;
+					usernameinput.select();
+				}
+				setTimeout(() => dead_guys.delete(player), 1000);
 				update();
 			}
 		}
-
-		function chat_listener({ key }) {
-			if (key === 'Enter') {
-				ws.send(JSON.stringify({
-					type: 'message',
-					message: chatinput.value
-				}));
-				append_chat(chatinput.value);
-				chatinput.value = '';
-			}
-		}
-
-		chatinput.addEventListener('keypress', chat_listener);
-
-		function append_chat(text, username) {
-			const elem = document.createElement('p');
-			const name = document.createElement(username === undefined ? 'span' : 'b');
-			name.textContent = (username === undefined ? '(You)' : username) + ': ';
-			elem.appendChild(name);
-			elem.insertAdjacentText('beforeend', text);
-			chatbox.prepend(elem);
-		}
-
-		function handle_key(event, is_down) {
-			if (keys.has(event.code)) {
-				event.preventDefault();
-				keys_down[is_down ? 'add' : 'delete'](event.code);
-				let accel = 0;
-				if (keys_down.has('ArrowUp')) accel++;
-				if (keys_down.has('ArrowDown')) accel--;
-				ws.send(JSON.stringify({
-					type: 'position',
-					x: Math.cos(angle) * accel,
-					y: Math.sin(angle) * accel
-				}));
-			} else if (event.target !== chatinput) chatinput.select();
-		}
-
-		const turn_interval = setInterval(() => {
-			if (keys_down.has('ArrowLeft'))  angle -= Math.PI / 10;
-			if (keys_down.has('ArrowRight')) angle += Math.PI / 10;
-		}, 100);
 
 		function update() {
 			ctx.save();
@@ -243,8 +196,8 @@
 			ctx.globalAlpha = 1;
 
 			const me = players.get(my_id);
-			if (me) {
-				const [x, y] = players.get(my_id).position;
+			if (me && me.position) {
+				const [x, y] = me.position;
 				ctx.beginPath();
 				ctx.moveTo(x, y);
 				ctx.lineTo(x + Math.cos(angle) * 5, y + Math.sin(angle) * 5);
@@ -259,7 +212,51 @@
 				}
 			}
 		}
+
+		function chat_listener({ key }) {
+			if (key === 'Enter') {
+				ws.send(JSON.stringify({
+					type: 'message',
+					message: chatinput.value
+				}));
+				append_chat(chatinput.value);
+				chatinput.value = '';
+			}
+		}
+
+		chatinput.addEventListener('keydown', chat_listener);
+
+		function append_chat(text, username) {
+			const elem = document.createElement('p');
+			const name = document.createElement(username === undefined ? 'span' : 'b');
+			name.textContent = (username === undefined ? '(You)' : username) + ': ';
+			elem.appendChild(name);
+			elem.insertAdjacentText('beforeend', text);
+			chatbox.prepend(elem);
+		}
+
+		function handle_key(event, is_down) {
+			if (keys.has(event.code)) {
+				keys_down[is_down ? 'add' : 'delete'](event.code);
+				if (!playing) return;
+				event.preventDefault();
+				let accel = 0;
+				if (keys_down.has('ArrowUp')) accel++;
+				if (keys_down.has('ArrowDown')) accel--;
+				ws.send(JSON.stringify({
+					type: 'position',
+					x: Math.cos(angle) * accel,
+					y: Math.sin(angle) * accel
+				}));
+			} else if (event.target !== chatinput && playing) chatinput.select();
+		}
+
+		setInterval(() => {
+			if (keys_down.has('ArrowLeft'))  angle -= Math.PI / 10;
+			if (keys_down.has('ArrowRight')) angle += Math.PI / 10;
+		}, 100);
 	}
+}
 </script>
 
 </html>

@@ -10,6 +10,7 @@ const { Server } = require('ws'),
 class Game {
 	id = 0;
 	players = new Set;
+	dead_guys = new Set;
 	terrain = terrains[Math.floor(Math.random() * terrains.length)];
 
 	constructor(ws, req) {
@@ -18,7 +19,7 @@ class Game {
 	}
 
 	send_to_all(type, from, message, send_to_me = false, send_username = false) {
-		for (const player of this.players) {
+		for (const player of this.all_players()) {
 			if (!send_to_me && player === from) continue;
 			const obj = { type, message, id: from.id };
 			if (send_username) {
@@ -48,7 +49,7 @@ class Game {
 			if (player.is_overlapping_wall()) {
 				this.send_to_all('die', player, Symbol(), true);
 				this.players.delete(player);
-				player.ws.close();
+				this.dead_guys.add(player);
 			}
 		}
 	}
@@ -58,6 +59,11 @@ class Game {
 		this.send_to_all('bye', player, Symbol());
 	}
 
+	*all_players() {
+		yield* this.players;
+		yield* this.dead_guys;
+	}
+
 	static max_players = Infinity;
 	static valid_speeds = new Set([-1, 0, 1]);
 	static tick_length = 50;
@@ -65,16 +71,12 @@ class Game {
 }
 
 class Player {
-	position = [12 + Math.random() * 30, 12 + Math.random() * 30];
-	speed = [0, 0];
-	accel = [0, 0];
-	color = random_color();
-
 	constructor(ws, game, username) {
 		this.username = username;
 		this.ws = ws;
 		this.game = game;
 		this.id = game.id++;
+		this.start();
 		ws.send(JSON.stringify({
 			type: 'id', id: this.id
 		}));
@@ -93,23 +95,15 @@ class Player {
 				this.accel = [
 					data.x * Player.accel / norm || 0,
 					data.y * Player.accel / norm || 0];
+			} else if (data.type === 'restart') {
+				this.username = String(data.username);
+				game.dead_guys.delete(this);
+				this.start();
 			}
 		});
 
 		ws.on('close', () => game.remove(this));
 
-		game.players.add(this);
-		game.send_to_all('position', this, this.position, false, true);
-
-		for (const player of game.players) {
-			ws.send(JSON.stringify({
-				type: 'position',
-				id: player.id,
-				message: player.position,
-				username: player.username,
-				color: player.color
-			}));
-		}
 		ws.send(JSON.stringify({
 			type: 'wall',
 			message: game.terrain.walls
@@ -133,6 +127,27 @@ class Player {
 			}
 		}
 		return false;
+	}
+
+	start() {
+		this.position = [12 + Math.random() * 30, 12 + Math.random() * 30];
+		this.speed = [0, 0];
+		this.accel = [0, 0];
+		this.color = random_color();
+
+		this.game.players.add(this);
+
+		for (const player of this.game.players) {
+			this.ws.send(JSON.stringify({
+				type: 'position',
+				id: player.id,
+				message: player.position,
+				username: player.username,
+				color: player.color
+			}));
+		}
+
+		this.game.send_to_all('position', this, this.position, false, true);
 	}
 
 	static radius = 5;
