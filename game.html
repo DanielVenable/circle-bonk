@@ -78,14 +78,20 @@
 		ctx = canvas.getContext('2d'),
 		scale = 10;
 
+	let on_screen = new Set,
+		ws, my_id,
+		walls = [],
+		angle = 0,
+		playing = false;
+
 	ctx.imageSmoothingEnabled = false;
 	ctx.textAlign = 'center';
 	ctx.font = '5px arial';
 
-	players.set_property = function (id, property, value) {
-		const player = this.get(id);
+	function set_property(id, property, value) {
+		const player = players.get(id);
 		if (player) player[property] = value;
-		else this.set(id, { [property]: value });
+		else players.set(id, { [property]: value });
 	}
 
 	usernameinput.value = localStorage.display_name || '';
@@ -93,8 +99,6 @@
 	usernameinput.addEventListener('keydown', ({ key }) => {
 		if (key === 'Enter') start();
 	});
-
-	let ws, walls = [], my_id, angle = 0, playing = false;
 
 	function start() {
 		playing = true;
@@ -127,35 +131,35 @@
 		document.addEventListener('keyup', e => handle_key(e, false));
 
 		ws.onmessage = ({ data }) => {
-			const { type, message, username, color, id } = JSON.parse(data);
+			const { type, message, name, color, id, pos } = JSON.parse(data);
 			if (type === 'message') {
 				append_chat(message, players.get(id).username);
+			} else if (type === 'player') {
+				set_property(id, 'username', name);
+				set_property(id, 'color', color);
 			} else if (type === 'position') {
-				if (username !== undefined) {
-					players.set_property(id, 'username', username);
+				on_screen = new Set([my_id]);
+				for (const [id, pos] of message) {
+					on_screen.add(id);
+					set_property(id, 'position', pos);
 				}
-				if (color) players.set_property(id, 'color', color);
-				if (id === my_id) {
-					ctx.setTransform(scale, 0, 0, scale,
-						canvas.width  / 2 - message[0] * scale,
-						canvas.height / 2 - message[1] * scale);
-				}
-				players.set_property(id, 'position', message);
-				update();
+				set_property(my_id, 'position', pos);
+				ctx.setTransform(scale, 0, 0, scale,
+					canvas.width  / 2 - pos[0] * scale,
+					canvas.height / 2 - pos[1] * scale);
 			} else if (type === 'id') {
 				my_id = id;
-				players.set_property(id, 'username', usernameinput.value);
+				set_property(id, 'username', usernameinput.value);
 			} else if (type === 'bye') {
 				players.delete(id);
-				update();
 			} else if (type === 'wall') {
 				walls = message;
-				update();
 			} else if (type === 'die') {
 				const player = players.get(id);
 				player.death_date = Date.now();
 				dead_guys.add(player);
 				players.delete(id);
+				on_screen.delete(id);
 				if (id === my_id) {
 					playing = false;	
 					chatinput.disabled = true;
@@ -163,7 +167,8 @@
 					usernameinput.select();
 				}
 				setTimeout(() => dead_guys.delete(player), 1000);
-				update();
+			} else if (type === 'leave') {
+				on_screen.delete(id);
 			}
 		}
 
@@ -205,7 +210,9 @@
 			}
 
 			function* iterator() {
-				yield* players.values();
+				for (const id of on_screen) {
+					yield players.get(id);
+				}
 				for (const player of dead_guys) {
 					ctx.globalAlpha = 1 - (Date.now() - player.death_date) / 1000;
 					yield player;
@@ -255,6 +262,8 @@
 			if (keys_down.has('ArrowLeft'))  angle -= Math.PI / 10;
 			if (keys_down.has('ArrowRight')) angle += Math.PI / 10;
 		}, 100);
+
+		setInterval(update, 50);
 	}
 }
 </script>

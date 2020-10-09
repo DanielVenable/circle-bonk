@@ -18,15 +18,15 @@ class Game {
 		if (ws && req) new Player(ws, this, get_username(req));
 	}
 
-	send_to_all(type, from, message, send_to_me = false, send_username = false) {
+	send_to_all(type, from, send_to_me = false, send_username = false, message = Symbol()) {
+		const obj = { type, message, id: from.id };
+		if (send_username) {
+			obj.name = from.username;
+			obj.color = from.color;
+		}
+		const str = JSON.stringify(obj);
 		for (const player of this.all_players()) {
-			if (!send_to_me && player === from) continue;
-			const obj = { type, message, id: from.id };
-			if (send_username) {
-				obj.username = from.username;
-				obj.color = from.color;
-			}
-			player.ws.send(JSON.stringify(obj));
+			if (send_to_me || player !== from) player.ws.send(str);
 		}
 	}
 
@@ -39,15 +39,34 @@ class Game {
 		for (let i = 0; i < arr.length; i++) {
 			const player = arr[i];
 			add(player.position, player.speed);
+
+			const x_min = player.position[0] - Player.min_show_player[0],
+				x_max = player.position[0] + Player.min_show_player[0],
+				y_min = player.position[1] - Player.min_show_player[1],
+				y_max = player.position[1] + Player.min_show_player[1];
 			for (let j = i + 1; j < arr.length; j++) {
-				collide_players(player, arr[j]);
+				if (arr[j].position[0] > x_min && arr[j].position[0] < x_max &&
+					arr[j].position[1] > y_min && arr[j].position[1] < y_max) {
+					player.on_screen.push([ arr[j].id, arr[j].position ]);
+					arr[j].on_screen.push([ player.id, player.position ]);
+					collide_players(player, arr[j]);
+				}
 			}
+
 			add(player.speed, player.accel);
 			player.speed[0] *= Game.friction;
 			player.speed[1] *= Game.friction;
-			this.send_to_all('position', player, player.position, true);
+
+			player.ws.send(JSON.stringify({
+				type: 'position',
+				message: player.on_screen,
+				pos: player.position
+			}));
+
+			player.on_screen = [];
+
 			if (player.is_overlapping_wall()) {
-				this.send_to_all('die', player, Symbol(), true);
+				this.send_to_all('die', player, true);
 				this.players.delete(player);
 				this.dead_guys.add(player);
 			}
@@ -56,7 +75,7 @@ class Game {
 
 	remove(player) {
 		this.players.delete(player);
-		this.send_to_all('bye', player, Symbol());
+		this.send_to_all('bye', player);
 	}
 
 	*all_players() {
@@ -71,6 +90,8 @@ class Game {
 }
 
 class Player {
+	on_screen = [];
+
 	constructor(ws, game, username) {
 		this.username = username;
 		this.ws = ws;
@@ -88,7 +109,7 @@ class Player {
 				return;
 			}
 			if (data.type === 'message') {
-				game.send_to_all('message', this, String(data.message));
+				game.send_to_all('message', this, false, false, String(data.message));
 			} else if (data.type === 'position') {
 				const norm = Math.sqrt(data.x ** 2 + data.y ** 2);
 				if (isNaN(norm)) return;
@@ -137,23 +158,23 @@ class Player {
 
 		this.game.players.add(this);
 
-		for (const player of this.game.players) {
+		for (const player of this.game.all_players()) {
 			this.ws.send(JSON.stringify({
-				type: 'position',
+				type: 'player',
 				id: player.id,
-				message: player.position,
-				username: player.username,
+				name: player.username,
 				color: player.color
 			}));
 		}
 
-		this.game.send_to_all('position', this, this.position, false, true);
+		this.game.send_to_all('player', this, false, true);
 	}
 
 	static radius = 5;
 	static sq_radius = Player.radius ** 2;
 	static accel = 0.25;
 	static max_name_length = 30;
+	static min_show_player = [150 + Player.radius, 100 + Player.radius];
 }
 
 const server = createServer(async (req, res) => {
