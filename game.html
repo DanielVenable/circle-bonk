@@ -9,9 +9,15 @@
 		span {
 			font-style: italic;
 		}
-		#start:not([hidden]), #play:not([hidden]) {
+		#play:not([hidden]) {
 			display: flex;
 			justify-content: center;
+		}
+		body {
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			flex-direction: column;
 		}
 		#chatbox {
 			border: 1px solid black;
@@ -45,11 +51,11 @@
 </head>
 
 <body>
-	<div id="start">
+	<p id="start">
 		<label>Choose a display name:
 			<input id="displayname" maxlength="30">
 		</label>
-	</div>
+	</p>
 	<div id="play" hidden>
 		<canvas width="3000" height="2000" id="canvas"></canvas>
 		<div id="chatcontainer">
@@ -112,6 +118,7 @@
 		}
 		play.hidden = false;
 		start_screen.hidden = true;
+		resize();
 	}
 
 	function setup() {
@@ -161,10 +168,11 @@
 				players.delete(id);
 				on_screen.delete(id);
 				if (id === my_id) {
-					playing = false;	
+					playing = false;
 					chatinput.disabled = true;
 					start_screen.hidden = false;
 					usernameinput.select();
+					resize();
 				}
 				setTimeout(() => dead_guys.delete(player), 1000);
 			} else if (type === 'leave') {
@@ -264,6 +272,18 @@
 		}, 100);
 
 		setInterval(update, 50);
+		resize();
+	}
+
+	window.addEventListener('resize', resize);
+
+	function resize() {
+		let num = 99;
+		play.style.width = '100%';
+		while (num && document.documentElement.clientHeight <
+			document.documentElement.scrollHeight) {
+			play.style.width = (num--) + '%';
+		}
 	}
 }
 </script>
