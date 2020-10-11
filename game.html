@@ -4,6 +4,7 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="icon" href="favicon.svg" sizes="any" type="image/svg+xml">
 	<title>Multiplayer game</title>
 	<style>
 		span {
@@ -132,7 +133,7 @@
 			}/?username=${
 				encodeURIComponent(
 					localStorage.display_name = usernameinput.value)
-			}`);
+			}&id=%s`);
 
 		document.addEventListener('keydown', e => handle_key(e, true));
 		document.addEventListener('keyup', e => handle_key(e, false));

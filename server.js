@@ -1,11 +1,20 @@
 'use strict';
 
+const { format } = require('util');
+
 const { Server } = require('ws'),
 	{ createServer } = require('http'),
 	{ readFile } = require('fs').promises,
 	{ parse } = require('url'),
-	port = +process.argv[2] || 80,
-	file = readFile(__dirname + '/game.html');
+	port = +process.argv[2] || 80;
+
+process.chdir(__dirname);
+
+const files = {
+	game: readFile('game.html').then(String),
+	home: readFile('home-page.html').then(String),
+	favicon: readFile('favicon.svg').then(String)
+}
 
 class Game {
 	id = 0;
@@ -13,9 +22,9 @@ class Game {
 	dead_guys = new Set;
 	terrain = terrains[Math.floor(Math.random() * terrains.length)];
 
-	constructor(ws, req) {
+	constructor(ws, username) {
 		this.ticker = setInterval(this.tick.bind(this), Game.tick_length);
-		if (ws && req) new Player(ws, this, get_username(req));
+		if (ws && username) new Player(ws, this, username);
 	}
 
 	send_to_all(type, from, send_to_me = false, send_username = false, message = Symbol()) {
@@ -84,7 +93,6 @@ class Game {
 	}
 
 	static max_players = Infinity;
-	static valid_speeds = new Set([-1, 0, 1]);
 	static tick_length = 50;
 	static friction = 0.95;
 }
@@ -180,24 +188,47 @@ class Player {
 const server = createServer(async (req, res) => {
 	res.setHeader('Content-Type', 'text/html');
 	res.statusCode = 200;
-	res.end(await file);
+	const { pathname, query } = parse(req.url, true);
+	switch (pathname) {
+		case '/': return res.end(await files.home);
+		case '/play': {
+			return res.end(
+				format(await files.game, encodeURIComponent(query.code)));
+		}
+		case '/favicon.svg': {
+			res.setHeader('Content-Type', 'image/svg+xml');
+			return res.end(format(await files.favicon, random_color()));
+		}
+		default:
+			res.statusCode = 404;
+			return res.end();
+	}
 });
 
 const ws_server = new Server({ server });
 
-server.listen(port, () => console.log('Server running on http://localhost:%d', port));
+server.listen(port, () =>
+	console.log('Server running on http://localhost:%d', port));
 
-const games = [];
+const private_games = new Map, public_games = [];
 
 ws_server.on('connection', (ws, req) => {
-	const username = get_username(req);
+	let { username, id } = parse(req.url, true).query;
+	username = String(username);
+	id = String(id);
 	if (username.length > Player.max_name_length) return;
-	for (const game of games) {
-		if (game.players.size < Game.max_players) {
-			return new Player(ws, game, username);
+	if (id) {
+		const game = private_games.get(id);
+		if (game) new Player(ws, game, username);
+		else private_games.set(id, new Game(ws, username));
+	} else {
+		for (const game of public_games) {
+			if (game.players.size < Game.max_players) {
+				return new Player(ws, game, username);
+			}
 		}
+		public_games.push(new Game(ws, req));	
 	}
-	games.push(new Game(ws, req));
 });
 
 function random_color() {
@@ -210,17 +241,15 @@ function add(v1, v2) {
 	}
 }
 
-function get_username({ url }) {
-	return String(parse(url, true).query.username);
-}
-
 function collide_players(p1, p2) {
 	const x = (p2.position[0] - p1.position[0]),
 		y = (p2.position[1] - p1.position[1]);
 	const distance = Math.sqrt(x ** 2 + y ** 2);
 	if (distance > Player.radius * 2) return;
 	const norm_x = x / distance, norm_y = y / distance;
-	const speed = (p1.speed[0] - p2.speed[0]) * norm_x + (p1.speed[1] - p2.speed[1]) * norm_y;
+	const speed =
+		(p1.speed[0] - p2.speed[0]) * norm_x +
+		(p1.speed[1] - p2.speed[1]) * norm_y;
 	if (speed <= 0) return;
 	p1.speed[0] -= speed * norm_x;
 	p1.speed[1] -= speed * norm_y;
