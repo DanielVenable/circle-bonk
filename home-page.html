@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="icon" href="favicon.svg" sizes="any" type="image/svg+xml">
+	<title>Multiplayer game</title>
+	<style>
+		body {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+		}
+		button {
+			font-size: x-large;
+			margin: 3vh;
+		}
+	</style>
+</head>
+<body>
+	<a href="/play"><button>Start Game</button></a>
+	<button id="join">Join a Private Game</button>
+	<form id="code" action="/play" hidden>
+		<label>Enter game id:<input name="code" id="input"></label>
+		<input type="submit">
+	</form>
+</body>
+<script>
+	const [join, code, input] = ['join', 'code', 'input']
+		.map(document.getElementById.bind(document));
+
+	join.addEventListener('click', () => {
+		code.hidden = !code.hidden;
+		input.select();
+	});
+</script>
+</html>
