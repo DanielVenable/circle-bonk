@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Terrrain design</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+		}
+		canvas {
+			border: 1px solid black;
+			height: 99vh;
+		}
+	</style>
+</head>
+
+<body>
+	<canvas height="1000" width="1000"></canvas>
+</body>
+
+<script>
+	const canvas = document.querySelector('canvas');
+	const ctx = canvas.getContext('2d');
+	const stuff = [];
+	let next_coords = null;
+
+	canvas.addEventListener('click', event => {
+		const coords = get_coords(canvas, event);
+		if (next_coords) {
+			const [x1, y1, x, y] = next_coords.concat(coords)
+				.map(n => Math.floor(n/20) * 20);
+			const arr = Math.abs(x - x1) > Math.abs(y - y1) ?
+				[Math.min(x, x1), Math.min(y, y1), Math.abs(x - x1), 1] :
+				[Math.min(x, x1), Math.min(y, y1), 1, Math.abs(y - y1)];
+			ctx.fillRect(...arr);
+			stuff.push(arr);
+			next_coords = null;
+			console.log('drawn');
+		} else next_coords = coords;
+	});
+
+	function get_coords(canvas, { clientX, clientY }) {
+		const rect = canvas.getBoundingClientRect();
+		return [
+			(clientX - rect.left) * canvas.width / canvas.clientWidth,
+   			(clientY - rect.top) * canvas.height / canvas.clientHeight
+		];
+	}
+</script>
+
+</html>

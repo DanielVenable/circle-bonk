@@ -180,7 +180,7 @@ class Player {
 
 	static radius = 5;
 	static sq_radius = Player.radius ** 2;
-	static accel = 0.25;
+	static accel = 0.3;
 	static max_name_length = 30;
 	static min_show_player = [150 + Player.radius, 100 + Player.radius];
 }
@@ -215,9 +215,9 @@ const private_games = new Map, public_games = [];
 ws_server.on('connection', (ws, req) => {
 	let { username, id } = parse(req.url, true).query;
 	username = String(username);
-	id = String(id);
 	if (username.length > Player.max_name_length) return;
 	if (id) {
+		id = String(id);
 		const game = private_games.get(id);
 		if (game) new Player(ws, game, username);
 		else private_games.set(id, new Game(ws, username));
