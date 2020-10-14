@@ -41,6 +41,8 @@ class Game {
 
 	destroy() {
 		clearInterval(this.ticker);
+		public_games.delete(this);
+		private_games.delete(this);
 	}
 
 	tick() {
@@ -84,7 +86,9 @@ class Game {
 
 	remove(player) {
 		this.players.delete(player);
+		this.dead_guys.delete(player);
 		this.send_to_all('bye', player);
+		if (this.all_players().next().done) this.destroy();
 	}
 
 	*all_players() {
@@ -193,7 +197,8 @@ const server = createServer(async (req, res) => {
 		case '/': return res.end(await files.home);
 		case '/play': {
 			return res.end(
-				format(await files.game, encodeURIComponent(query.code)));
+				format(await files.game, query.code ? 
+					'&id=' + encodeURIComponent(query.code) : ''));
 		}
 		case '/favicon.svg': {
 			res.setHeader('Content-Type', 'image/svg+xml');
@@ -210,7 +215,7 @@ const ws_server = new Server({ server });
 server.listen(port, () =>
 	console.log('Server running on http://localhost:%d', port));
 
-const private_games = new Map, public_games = [];
+const private_games = new Map, public_games = new Set;
 
 ws_server.on('connection', (ws, req) => {
 	let { username, id } = parse(req.url, true).query;
@@ -227,7 +232,7 @@ ws_server.on('connection', (ws, req) => {
 				return new Player(ws, game, username);
 			}
 		}
-		public_games.push(new Game(ws, req));	
+		public_games.add(new Game(ws, username));	
 	}
 });
 
