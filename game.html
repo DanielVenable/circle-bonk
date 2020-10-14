@@ -92,6 +92,7 @@
 		scale = 10;
 
 	let on_screen = new Set,
+		treasure_pos,
 		ws, my_id,
 		walls = [],
 		angle = 0,
@@ -144,7 +145,7 @@
 		document.addEventListener('keyup', e => handle_key(e, false));
 
 		ws.onmessage = ({ data }) => {
-			const { type, message, name, color, id, pos } = JSON.parse(data);
+			const { type, message, name, color, id, pos, treasure } = JSON.parse(data);
 			if (type === 'message') {
 				append_chat(message, players.get(id).username);
 			} else if (type === 'player') {
@@ -152,6 +153,7 @@
 				set_property(id, 'color', color);
 			} else if (type === 'position') {
 				on_screen = new Set([my_id]);
+				treasure_pos = treasure;
 				for (const [id, pos] of message) {
 					on_screen.add(id);
 					set_property(id, 'position', pos);
@@ -191,6 +193,8 @@
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 			ctx.restore();
 
+			ctx.fillStyle = '#000000';
+
 			for (const wall of walls) {
 				ctx.fillRect(...wall);
 			}
@@ -210,8 +214,11 @@
 				ctx.fillStyle = color || '#000000';
 				ctx.fillText(username, position[0], position[1] - 6);
 			}
-			ctx.fillStyle = '#000000';
+
 			ctx.globalAlpha = 1;
+
+			ctx.fillStyle = '#FFFF00';
+			if (treasure_pos) ctx.fillRect(...treasure_pos, 10, 10)
 
 			const me = players.get(my_id);
 			if (me && me.position) {

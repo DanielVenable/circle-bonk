@@ -21,6 +21,7 @@ class Game {
 	players = new Set;
 	dead_guys = new Set;
 	terrain = terrains[Math.floor(Math.random() * terrains.length)];
+	treasure = new Treasure(this, 100, 100);
 
 	constructor(ws, username) {
 		this.ticker = setInterval(this.tick.bind(this), Game.tick_length);
@@ -44,15 +45,20 @@ class Game {
 	}
 
 	tick() {
+		add(this.treasure.position, this.treasure.speed);
+		this.treasure.speed[0] *= Game.friction;
+		this.treasure.speed[1] *= Game.friction;
+		this.treasure.bounce_off_walls();
+
 		const arr = [...this.players];
 		for (let i = 0; i < arr.length; i++) {
 			const player = arr[i];
 			add(player.position, player.speed);
 
-			const x_min = player.position[0] - Player.min_show_player[0],
-				x_max = player.position[0] + Player.min_show_player[0],
-				y_min = player.position[1] - Player.min_show_player[1],
-				y_max = player.position[1] + Player.min_show_player[1];
+			const x_min = player.position[0] - Player.min_show_player_x,
+				x_max = player.position[0] + Player.min_show_player_x,
+				y_min = player.position[1] - Player.min_show_player_y,
+				y_max = player.position[1] + Player.min_show_player_y;
 			for (let j = i + 1; j < arr.length; j++) {
 				if (arr[j].position[0] > x_min && arr[j].position[0] < x_max &&
 					arr[j].position[1] > y_min && arr[j].position[1] < y_max) {
@@ -62,15 +68,21 @@ class Game {
 				}
 			}
 
-			add(player.speed, player.accel);
-			player.speed[0] *= Game.friction;
-			player.speed[1] *= Game.friction;
+			const obj = new Position_data(player.on_screen, player.position);
 
-			player.ws.send(JSON.stringify({
-				type: 'position',
-				message: player.on_screen,
-				pos: player.position
-			}));
+			if (overlap1d(player.position[0] - Player.half_board_width,
+					Player.half_board_width * 2,
+					this.treasure.position[0],
+					Treasure.length) &&
+				overlap1d(player.position[1] - Player.half_board_height,
+					Player.half_board_height * 2,
+					this.treasure.position[1],
+					Treasure.length)) {
+				this.treasure.collide_with(player);
+				obj.treasure = this.treasure.position;
+			}
+
+			player.ws.send(JSON.stringify(obj));
 
 			player.on_screen = [];
 
@@ -78,6 +90,10 @@ class Game {
 				this.send_to_all('die', player, true);
 				this.players.delete(player);
 				this.dead_guys.add(player);
+			} else {
+				add(player.speed, player.accel);
+				player.speed[0] *= Game.friction;
+				player.speed[1] *= Game.friction;
 			}
 		}
 	}
@@ -97,13 +113,31 @@ class Game {
 	static friction = 0.95;
 }
 
-class Player {
+class Position_data {
+	type = 'position';
+
+	constructor(message, pos) {
+		this.message = message;
+		this.pos = pos;
+	}
+}
+
+class Mobile {
+	speed = [0, 0];
+
+	constructor(game, x = 0, y = 0) {
+		this.position = [x, y];
+		this.game = game;
+	}
+}
+
+class Player extends Mobile {
 	on_screen = [];
 
 	constructor(ws, game, username) {
+		super(game, 12 + Math.random() * 30, 12 + Math.random() * 30);
 		this.username = username;
 		this.ws = ws;
-		this.game = game;
 		this.id = game.id++;
 		this.start();
 		ws.send(JSON.stringify({
@@ -128,6 +162,8 @@ class Player {
 				this.username = String(data.username);
 				game.dead_guys.delete(this);
 				this.start();
+				this.position = [12 + Math.random() * 30, 12 + Math.random() * 30];
+				this.speed = [0, 0];
 			}
 		});
 
@@ -142,25 +178,12 @@ class Player {
 	is_overlapping_wall() {
 		const [x, y] = this.position;
 		for (const [x1, y1, width, height] of this.game.terrain.walls) {
-			if (x + Player.radius > x1 && x - Player.radius < x1 + width &&
-				y + Player.radius > y1 && y - Player.radius < y1 + height) {
-				let is_below, is_right;
-				if ((is_right = x1 < x) && x < x1 + width ||
-					(is_below = y1 < y) && y < y1 + height ||
-					(is_right ? x1 + width - x : x1 - x) ** 2 +
-					(is_below ? y1 + height - y : y1 - y) ** 2 <
-					Player.sq_radius
-				) {
-					return true;
-				}
-			}
+			if (circle_touches_rect(x, y, Player.radius, x1, y1, width, height)) return true;
 		}
 		return false;
 	}
 
 	start() {
-		this.position = [12 + Math.random() * 30, 12 + Math.random() * 30];
-		this.speed = [0, 0];
 		this.accel = [0, 0];
 		this.color = random_color();
 
@@ -179,10 +202,72 @@ class Player {
 	}
 
 	static radius = 5;
-	static sq_radius = Player.radius ** 2;
 	static accel = 0.3;
 	static max_name_length = 30;
-	static min_show_player = [150 + Player.radius, 100 + Player.radius];
+	static half_board_width = 150;
+	static half_board_height = 100;
+	static min_show_player_x = Player.half_board_width + Player.radius;
+	static min_show_player_y = Player.half_board_height + Player.radius;
+}
+Player.prototype.mass = 1;
+
+class Treasure extends Mobile {
+	bounce_off_walls() {
+		const [x, y] = this.position;
+		const corner_x = x + (this.speed[0] > 0 ? Treasure.length : 0),
+			corner_y = y + (this.speed[1] > 0 ? Treasure.length : 0);
+		for (const [x2, y2, width, height] of this.game.terrain.walls) {
+			if (overlap1d(x, Treasure.length, x2, width) &&
+				overlap1d(y, Treasure.length, y2, height)) {
+				if (hit_segment(true, corner_x, corner_y, ...this.speed,
+						x2, y2 + (this.speed[1] > 0 ? 0 : height), width)) {
+					this.speed[1] *= -1;
+				}
+				if (hit_segment(false, corner_x, corner_y, ...this.speed,
+						x2 + (this.speed[0] > 0 ? 0 : width), y2, height)) {
+					this.speed[0] *= -1;
+				}
+			}
+		}
+	}
+
+	collide_with(player) {
+		if (!circle_touches_rect(...player.position, Player.radius,
+			...this.position, Treasure.length, Treasure.length)) return;
+		const x = player.position[0] - this.position[0] - Treasure.length / 2,
+			y = player.position[1] - this.position[1] - Treasure.length / 2;
+		bounce(x, y, Math.sqrt(x ** 2 + y ** 2), this, player);
+	}
+
+	static length = 10;
+}
+Treasure.prototype.mass = 0.5;
+
+function circle_touches_rect(x, y, r, x1, y1, width, height) {
+	if (x + r > x1 && x - r < x1 + width &&
+		y + r > y1 && y - r < y1 + height) {
+		let is_below, is_right;
+		return (is_right = x1 < x) && x < x1 + width ||
+			(is_below = y1 < y) && y < y1 + height ||
+			(is_right ? x1 + width - x : x1 - x) ** 2 +
+			(is_below ? y1 + height - y : y1 - y) ** 2 < r ** 2;
+	}
+}
+
+function hit_segment(is_horizontal, x, y, vx, vy, x2, y2, length) {
+	if (is_horizontal) {
+		if (y - vy > y2) return false;
+		const hit_x = vx * (y2 - y) / vy + x;
+		return x2 < hit_x && hit_x < x2 + length;
+	} else {
+		if (x - vx > x2) return false;
+		const hit_y = vy * (x2 - x) / vx + y;
+		return y2 < hit_y && hit_y < y2 + length;
+	}
+}
+
+function overlap1d(x1, width1, x2, width2) {
+	return x1 <= x2 && x2 < x1 + width1 || x2 <= x1 && x1 < x2 + width2;
 }
 
 const server = createServer(async (req, res) => {
@@ -227,7 +312,7 @@ ws_server.on('connection', (ws, req) => {
 				return new Player(ws, game, username);
 			}
 		}
-		public_games.push(new Game(ws, req));	
+		public_games.push(new Game(ws, req));
 	}
 });
 
@@ -245,16 +330,19 @@ function collide_players(p1, p2) {
 	const x = (p2.position[0] - p1.position[0]),
 		y = (p2.position[1] - p1.position[1]);
 	const distance = Math.sqrt(x ** 2 + y ** 2);
-	if (distance > Player.radius * 2) return;
+	if (distance <= Player.radius * 2) bounce(x, y, distance, p1, p2);
+}
+
+function bounce(x, y, distance, p1, p2) {
 	const norm_x = x / distance, norm_y = y / distance;
-	const speed =
-		(p1.speed[0] - p2.speed[0]) * norm_x +
+	const speed = (p1.speed[0] - p2.speed[0]) * norm_x +
 		(p1.speed[1] - p2.speed[1]) * norm_y;
 	if (speed <= 0) return;
-	p1.speed[0] -= speed * norm_x;
-	p1.speed[1] -= speed * norm_y;
-	p2.speed[0] += speed * norm_x;
-	p2.speed[1] += speed * norm_y;
+	const impulse = 2 * speed / (p1.mass + p2.mass);
+	p1.speed[0] -= impulse * p2.mass * norm_x;
+	p1.speed[1] -= impulse * p2.mass * norm_y;
+	p2.speed[0] += impulse * p1.mass * norm_x;
+	p2.speed[1] += impulse * p1.mass * norm_y;
 }
 
 const terrains = [
