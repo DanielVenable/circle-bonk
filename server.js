@@ -61,32 +61,27 @@ class Game {
 				x_max = player.position[0] + Player.min_show_player_x,
 				y_min = player.position[1] - Player.min_show_player_y,
 				y_max = player.position[1] + Player.min_show_player_y;
+
+			function is_on_screen(player) {
+				return player.position[0] > x_min && player.position[0] < x_max &&
+					player.position[1] > y_min && player.position[1] < y_max;
+			}
+
 			for (let j = i + 1; j < arr.length; j++) {
-				if (arr[j].position[0] > x_min && arr[j].position[0] < x_max &&
-					arr[j].position[1] > y_min && arr[j].position[1] < y_max) {
+				if (is_on_screen(arr[j])) {
 					player.on_screen.push([ arr[j].id, arr[j].position ]);
 					arr[j].on_screen.push([ player.id, player.position ]);
 					collide_players(player, arr[j]);
 				}
 			}
 
-			const obj = new Position_data(player.on_screen, player.position);
-
-			if (overlap1d(player.position[0] - Player.half_board_width,
-					Player.half_board_width * 2,
-					this.treasure.position[0],
-					Treasure.length) &&
-				overlap1d(player.position[1] - Player.half_board_height,
-					Player.half_board_height * 2,
-					this.treasure.position[1],
-					Treasure.length)) {
-				this.treasure.collide_with(player);
-				obj.treasure = this.treasure.position;
+			for (const dead of this.dead_guys) {
+				if (is_on_screen(dead)) {
+					dead.on_screen.push([ player.id, player.position ]);
+				}
 			}
 
-			player.ws.send(JSON.stringify(obj));
-
-			player.on_screen = [];
+			this.send_data(player, true);
 
 			if (player.is_overlapping_wall()) {
 				this.send_to_all('die', player, true);
@@ -98,6 +93,23 @@ class Game {
 				player.speed[1] *= Game.friction;
 			}
 		}
+
+		for (const dead of this.dead_guys) {
+			this.send_data(dead, false);
+		}
+	}
+
+	send_data(player, send_pos) {
+		const obj = new Position_data(player.on_screen, send_pos && player.position);
+
+		if (player.is_treasure_on_screen(this.treasure)) {
+			this.treasure.collide_with(player);
+			obj.treasure = this.treasure.position;
+		}
+
+		player.ws.send(JSON.stringify(obj));
+
+		player.on_screen = [];
 	}
 
 	remove(player) {
@@ -122,7 +134,7 @@ class Position_data {
 
 	constructor(message, pos) {
 		this.message = message;
-		this.pos = pos;
+		if (pos) this.pos = pos;
 	}
 }
 
@@ -204,6 +216,17 @@ class Player extends Mobile {
 
 		this.game.send_to_all('player', this, false, true);
 	}
+	
+	is_treasure_on_screen(treasure) {
+		return overlap1d(this.position[0] - Player.half_board_width,
+				Player.half_board_width * 2,
+				treasure.position[0],
+				Treasure.length) &&
+			overlap1d(this.position[1] - Player.half_board_height,
+				Player.half_board_height * 2,
+				treasure.position[1],
+				Treasure.length);
+	}
 
 	static radius = 5;
 	static accel = 0.3;
@@ -265,18 +288,6 @@ function circle_touches_rect(x, y, r, x1, y1, width, height) {
 			(is_below = y1 < y) && y < y1 + height ||
 			(is_right ? x1 + width - x : x1 - x) ** 2 +
 			(is_below ? y1 + height - y : y1 - y) ** 2 < r ** 2;
-	}
-}
-
-function hit_segment(is_horizontal, x, y, vx, vy, x2, y2, length) {
-	if (is_horizontal) {
-		if (y - vy > y2) return false;
-		const hit_x = vx * (y2 - y) / vy + x;
-		return x2 < hit_x && hit_x < x2 + length;
-	} else {
-		if (x - vx > x2) return false;
-		const hit_y = vy * (x2 - x) / vx + y;
-		return y2 < hit_y && hit_y < y2 + length;
 	}
 }
 

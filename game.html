@@ -152,16 +152,19 @@
 				set_property(id, 'username', name);
 				set_property(id, 'color', color);
 			} else if (type === 'position') {
-				on_screen = new Set([my_id]);
+				on_screen = new Set();
+				if (pos) on_screen.add(my_id);
 				treasure_pos = treasure;
 				for (const [id, pos] of message) {
 					on_screen.add(id);
 					set_property(id, 'position', pos);
 				}
-				set_property(my_id, 'position', pos);
-				ctx.setTransform(scale, 0, 0, scale,
-					canvas.width  / 2 - pos[0] * scale,
-					canvas.height / 2 - pos[1] * scale);
+				if (pos) {
+					set_property(my_id, 'position', pos);
+					ctx.setTransform(scale, 0, 0, scale,
+						canvas.width  / 2 - pos[0] * scale,
+						canvas.height / 2 - pos[1] * scale);
+				}
 			} else if (type === 'id') {
 				my_id = id;
 				set_property(id, 'username', usernameinput.value);
