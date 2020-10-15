@@ -1,8 +1,7 @@
 'use strict';
 
-const { format } = require('util');
-
-const { Server } = require('ws'),
+const { format } = require('util'),
+	{ Server } = require('ws'),
 	{ createServer } = require('http'),
 	{ readFile } = require('fs').promises,
 	{ parse } = require('url'),
@@ -28,7 +27,8 @@ class Game {
 		if (ws && username) new Player(ws, this, username);
 	}
 
-	send_to_all(type, from, send_to_me = false, send_username = false, message = Symbol()) {
+	send_to_all(type, from, send_to_me = false, send_username = false,
+			message = Symbol()) {
 		const obj = { type, message, id: from.id };
 		if (send_username) {
 			obj.name = from.username;
@@ -43,7 +43,7 @@ class Game {
 	destroy() {
 		clearInterval(this.ticker);
 		public_games.delete(this);
-		private_games.delete(this);
+		private_games.delete(keys.get(this));
 	}
 
 	tick() {
@@ -218,20 +218,30 @@ Player.prototype.mass = 1;
 class Treasure extends Mobile {
 	bounce_off_walls() {
 		const [x, y] = this.position;
-		const corner_x = x + (this.speed[0] > 0 ? Treasure.length : 0),
-			corner_y = y + (this.speed[1] > 0 ? Treasure.length : 0);
+		const center_x = x + Treasure.length / 2,
+			center_y = y + Treasure.length / 2;
 		for (const [x2, y2, width, height] of this.game.terrain.walls) {
 			if (overlap1d(x, Treasure.length, x2, width) &&
-				overlap1d(y, Treasure.length, y2, height)) {
-				if (hit_segment(true, corner_x, corner_y, ...this.speed,
-						x2, y2 + (this.speed[1] > 0 ? 0 : height), width)) {
-					this.speed[1] *= -1;
-				}
-				if (hit_segment(false, corner_x, corner_y, ...this.speed,
-						x2 + (this.speed[0] > 0 ? 0 : width), y2, height)) {
-					this.speed[0] *= -1;
-				}
+					overlap1d(y, Treasure.length, y2, height)) {
+				const b1 = this.bounce(y2, height, center_y, x2, width, center_x, 1);
+				const b0 = this.bounce(x2, width, center_x, y2, height, center_y, 0);
+				if (b1) this.speed[1] *= -1;
+				if (b0) this.speed[0] *= -1;
 			}
+		}
+	}
+
+	bounce(a2, a_length, center_a, b2, b_length, center_b, num) {
+		const multiplier = this.speed[num] < 0 ? 1 : -1;
+		const wall_side_y = this.speed[num] < 0 ? a2 + a_length : a2;
+		const y_dist = (wall_side_y - center_a) * multiplier +
+			Treasure.length / 2;
+		const x_dist = y_dist * this.speed[1 - num] / this.speed[num];
+		const x_pos = center_b + x_dist * multiplier - Treasure.length / 2;
+		if (overlap1d(x_pos, Treasure.length, b2, b_length)) {
+			const y_pos = wall_side_y - (this.speed[num] < 0 ? 0 : Treasure.length);
+			this.position = num ? [x_pos, y_pos] : [y_pos, x_pos];
+			return true;
 		}
 	}
 
@@ -300,7 +310,7 @@ const ws_server = new Server({ server });
 server.listen(port, () =>
 	console.log('Server running on http://localhost:%d', port));
 
-const private_games = new Map, public_games = new Set;
+const private_games = new Map, keys = new WeakMap, public_games = new Set;
 
 ws_server.on('connection', (ws, req) => {
 	let { username, id } = parse(req.url, true).query;
@@ -310,7 +320,11 @@ ws_server.on('connection', (ws, req) => {
 		id = String(id);
 		const game = private_games.get(id);
 		if (game) new Player(ws, game, username);
-		else private_games.set(id, new Game(ws, username));
+		else {
+			const game = new Game(ws, username);
+			private_games.set(id, game);
+			keys.set(game, id);
+		}
 	} else {
 		for (const game of public_games) {
 			if (game.players.size < Game.max_players) {
