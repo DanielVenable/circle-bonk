@@ -24,7 +24,7 @@ class Game {
 
 	constructor(ws, username) {
 		this.ticker = setInterval(this.tick.bind(this), Game.tick_length);
-		if (ws && username) new Player(ws, this, username);
+		new Player(ws, this, username);
 	}
 
 	send_to_all(type, from, send_to_me = false, send_username = false,
