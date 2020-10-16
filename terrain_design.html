@@ -19,6 +19,8 @@
 
 <body>
 	<canvas height="1000" width="1000"></canvas>
+	<button>get output</button>
+	<div></div>
 </body>
 
 <script>
@@ -49,6 +51,10 @@
    			(clientY - rect.top) * canvas.height / canvas.clientHeight
 		];
 	}
+
+	document.querySelector('button').addEventListener('click', () => {
+		document.querySelector('div').textContent = JSON.stringify(stuff);
+	});
 </script>
 
 </html>
