@@ -19,11 +19,19 @@ class Game {
 	id = 0;
 	players = new Set;
 	dead_guys = new Set;
-	terrain = terrains[Math.floor(Math.random() * terrains.length)];
-	treasure = new Treasure(this, 100, 100);
+	treasures = [];
 
-	constructor(ws, username) {
+	constructor(ws, username, type = 'normal') {
 		this.ticker = setInterval(this.tick.bind(this), Game.tick_length);
+		if (type === 'normal') {
+			this.world = public_terrains[Math.floor(Math.random() * public_terrains.length)];
+		} else if (type === 'soccer') {
+			this.world = private_terrains.soccer;
+		} else return;
+
+		for (const treasure of this.world.treasures) {
+			this.treasures.push(new Treasure(this, ...treasure));
+		}
 		new Player(ws, this, username);
 	}
 
@@ -47,10 +55,12 @@ class Game {
 	}
 
 	tick() {
-		add(this.treasure.position, this.treasure.speed);
-		this.treasure.speed[0] *= Game.friction;
-		this.treasure.speed[1] *= Game.friction;
-		this.treasure.bounce_off_walls();
+		for (const treasure of this.treasures) {
+			add(treasure.position, treasure.speed);
+			treasure.speed[0] *= Game.friction;
+			treasure.speed[1] *= Game.friction;
+			treasure.bounce_off_walls();
+		}
 
 		const arr = [...this.players];
 		for (let i = 0; i < arr.length; i++) {
@@ -101,10 +111,12 @@ class Game {
 
 	send_data(player, send_pos) {
 		const obj = new Position_data(player.on_screen, send_pos && player.position);
-
-		if (player.is_treasure_on_screen(this.treasure)) {
-			this.treasure.collide_with(player);
-			obj.treasure = this.treasure.position;
+		
+		for (const treasure of this.treasures) {
+			if (player.is_treasure_on_screen(treasure)) {
+				treasure.collide_with(player);
+				obj.treasures.push(treasure.position);
+			}
 		}
 
 		player.ws.send(JSON.stringify(obj));
@@ -124,6 +136,34 @@ class Game {
 		yield* this.dead_guys;
 	}
 
+	get_color() {
+		if (this.world.do_teams) {
+			const team_numbers = new Map;
+			for (const color of this.world.spawn_map.keys()) {
+				team_numbers.set(color, 0);
+			}
+			for (const { color } of this.all_players()) {
+				team_numbers.set(color, team_numbers.get(color) + 1);
+			}
+			let least_num = Infinity,
+				least_values = [];
+			for (const [color, num] of team_numbers) {
+				if (num === least_num) least_values.push(color);
+				else if (num < least_num) {
+					least_num = num;
+					least_values = [color];
+				}
+			}
+			return random_array_elem(least_values);
+		} else return random_color();
+	}
+
+	get_position(color) {
+		if (this.world.do_teams) {
+			return random_position(this.world.spawn_map.get(color));
+		} else return random_position(this.world.spawn);
+	}
+
 	static max_players = Infinity;
 	static tick_length = 50;
 	static friction = 0.95;
@@ -131,6 +171,7 @@ class Game {
 
 class Position_data {
 	type = 'position';
+	treasures = [];
 
 	constructor(message, pos) {
 		this.message = message;
@@ -151,7 +192,9 @@ class Player extends Mobile {
 	on_screen = [];
 
 	constructor(ws, game, username) {
-		super(game, 12 + Math.random() * 30, 12 + Math.random() * 30);
+		const color = game.get_color();
+		super(game, ...game.get_position(color));
+		this.color = color;
 		this.username = username;
 		this.ws = ws;
 		this.id = game.id++;
@@ -178,7 +221,8 @@ class Player extends Mobile {
 				this.username = String(data.username);
 				game.dead_guys.delete(this);
 				this.start();
-				this.position = [12 + Math.random() * 30, 12 + Math.random() * 30];
+				if (!game.world.do_teams) this.color = random_color();
+				this.position = game.get_position(this.color);
 				this.speed = [0, 0];
 			}
 		});
@@ -187,13 +231,13 @@ class Player extends Mobile {
 
 		ws.send(JSON.stringify({
 			type: 'wall',
-			message: game.terrain.walls
+			message: game.world.walls
 		}));
 	}
 
 	is_overlapping_wall() {
 		const [x, y] = this.position;
-		for (const [x1, y1, width, height] of this.game.terrain.walls) {
+		for (const [x1, y1, width, height] of this.game.world.walls) {
 			if (circle_touches_rect(x, y, Player.radius, x1, y1, width, height)) {
 				return true;
 			}
@@ -203,7 +247,6 @@ class Player extends Mobile {
 
 	start() {
 		this.accel = [0, 0];
-		this.color = random_color();
 
 		this.game.players.add(this);
 
@@ -245,7 +288,7 @@ class Treasure extends Mobile {
 		const [x, y] = this.position;
 		const center_x = x + Treasure.length / 2,
 			center_y = y + Treasure.length / 2;
-		for (const [x2, y2, width, height] of this.game.terrain.walls) {
+		for (const [x2, y2, width, height] of this.game.world.walls) {
 			if (overlap1d(x, Treasure.length, x2, width) &&
 					overlap1d(y, Treasure.length, y2, height)) {
 				const b1 = this.bounce(y2, height, center_y, x2, width, center_x, 1);
@@ -282,6 +325,11 @@ class Treasure extends Mobile {
 }
 Treasure.prototype.mass = 0.5;
 
+function random_position(rects) {
+	const rect = random_array_elem(rects);
+	return [0, 1].map(n => rect[n] + Math.random() * rect[2 + n]);
+}
+
 function circle_touches_rect(x, y, r, x1, y1, width, height) {
 	if (x + r > x1 && x - r < x1 + width &&
 		y + r > y1 && y - r < y1 + height) {
@@ -305,8 +353,9 @@ const server = createServer(async (req, res) => {
 		case '/': return res.end(await files.home);
 		case '/play': {
 			return res.end(
-				format(await files.game, query.code ? 
-					'&id=' + encodeURIComponent(query.code) : ''));
+				format(await files.game, (query.code ? 
+					'&id=' + encodeURIComponent(query.code) : '') + 
+					(query.mode ? '&mode=' + encodeURIComponent(query.mode) : '')));
 		}
 		case '/favicon.svg': {
 			res.setHeader('Content-Type', 'image/svg+xml');
@@ -326,7 +375,7 @@ server.listen(port, () =>
 const private_games = new Map, keys = new WeakMap, public_games = new Set;
 
 ws_server.on('connection', (ws, req) => {
-	let { username, id } = parse(req.url, true).query;
+	let { username, id, mode } = parse(req.url, true).query;
 	username = String(username);
 	if (username.length > Player.max_name_length) return;
 	if (id) {
@@ -334,7 +383,7 @@ ws_server.on('connection', (ws, req) => {
 		const game = private_games.get(id);
 		if (game) new Player(ws, game, username);
 		else {
-			const game = new Game(ws, username);
+			const game = new Game(ws, username, mode);
 			private_games.set(id, game);
 			keys.set(game, id);
 		}
@@ -377,53 +426,92 @@ function bounce(x, y, distance, p1, p2) {
 	p2.speed[1] += impulse * p1.mass * norm_y;
 }
 
-const terrains = [
-	{
-		walls: [
-			[ 55, 45, 305, 1 ],   [ 650, 260, 5, 1 ],   [ 125, 260, 525, 1 ],
-			[ 530, 65, 1, 135 ],  [ 690, 125, 230, 1 ], [ 745, 145, 1, 410 ],
-			[ 240, 295, 465, 1 ], [ 390, 335, 1, 155 ], [ 490, 395, 155, 1 ],
-			[ 125, 380, 1, 175 ], [ 485, 470, 185, 1 ], [ 90, 125, 320, 1 ],
-			[ 450, 45, 1, 135 ],  [ 240, 155, 1, 70 ],  [ 785, 0, 1, 105 ],
-			[ 610, 40, 1, 130 ],  [ 790, 235, 70, 1 ],  [ 885, 285, 1, 140 ],
-			[ 780, 360, 40, 1 ],  [ 825, 565, 150, 1 ], [ 740, 625, 145, 1 ],
-			[ 150, 585, 220, 1 ], [ 240, 405, 1, 70 ],  [ 435, 415, 1, 310 ],
-			[ 505, 445, 115, 1 ], [ 485, 425, 1, 60 ],  [ 700, 460, 1, 120 ],
-			[ 30, 680, 120, 1 ],  [ 35, 295, 75, 1 ],   [ 25, 100, 1, 145 ],
-			[ 15, 365, 1, 80 ],   [ 40, 555, 86, 1 ],   [ 305, 695, 1, 175 ],
-			[ 0, 775, 125, 1 ],   [ 15, 845, 150, 1 ],  [ 1000, 0, 1, 995 ],
-			[ 0, 0, 1000, 1 ],    [ 0, 0, 1, 1000 ],    [ 0, 1000, 1000, 1 ],
-			[ 1000, 0, 1, 1001 ], [ 1000, 0, 1, 1000 ], [ 595, 720, 275, 1 ],
-			[ 590, 550, 1, 60 ],  [ 455, 875, 440, 1 ], [ 765, 775, 1, 50 ],
-			[ 455, 775, 110, 1 ], [ 240, 720, 40, 1 ],  [ 120, 920, 285, 1 ],
-			[ 115, 905, 275, 1 ], [ 215, 735, 1, 145 ], [ 195, 735, 1, 165 ],
-			[ 195, 900, 1, 0 ],   [ 195, 900, 1, 5 ],   [ 485, 770, 1, 45 ],
-			[ 470, 645, 270, 1 ], [ 535, 535, 1, 35 ],  [ 825, 455, 1, 110 ],
-			[ 920, 195, 1, 125 ], [ 790, 430, 1, 90 ],  [ 920, 195, 1, 125 ],
-			[ 650, 775, 235, 1 ], [ 815, 815, 1, 60 ],  [ 940, 715, 1, 195 ],
-			[ 940, 350, 1, 140 ], [ 890, 530, 90, 1 ],  [ 965, 565, 1, 410 ],
-			[ 915, 160, 55, 1 ],  [ 970, 30, 1, 155 ]
-		]
-	},
-	{
-		walls: [
-			[ 0, 0, 1000, 1],     [ 0, 0, 1, 1000 ],
-			[ 0, 1000, 1000, 1],  [ 1000, 0, 1, 1000 ],
-			[ 80, 80, 1, 660 ],   [ 120, 840, 220, 1 ],
-			[ 420, 480, 1, 440 ], [ 340, 260, 260, 1 ],
-			[ 760, 220, 1, 340 ], [ 40, 760, 120, 1 ],
-			[ 200, 200, 1, 520 ], [ 460, 740, 320, 1 ],
-			[ 520, 400, 1, 240 ], [ 600, 340, 1, 120 ],
-			[ 620, 620, 240, 1 ], [ 200, 80, 240, 1 ],
-			[ 460, 120, 340, 1 ], [ 900, 60, 1, 620 ],
-			[ 240, 380, 100, 1 ], [ 580, 380, 1, 460 ],
-			[ 280, 520, 220, 1 ], [ 140, 440, 80, 1 ],
-			[ 720, 680, 1, 220 ], [ 840, 680, 1, 140 ],
-			[ 800, 500, 200, 1 ], [ 140, 880, 1, 100 ],
-			[ 0, 920, 120, 1 ],   [ 920, 780, 80, 1 ],
-			[ 360, 0, 1, 20 ],    [ 0, 60, 1, 20 ],
-			[ 100, 0, 1, 20 ],    [ 820, 0, 1, 60 ],
-			[ 900, 100, 20, 1 ]
-		]
+function random_array_elem(arr) {
+	return arr[Math.floor(Math.random() * arr.length)];
+}
+
+class World {
+	constructor(walls, do_teams, spawn, treasures = []) {
+		this.walls = walls;
+		this.treasures = treasures;
+		if (this.do_teams = do_teams) {
+			this.spawn_map = new Map(spawn);
+		} else this.spawn = spawn;
 	}
+}
+
+const public_terrains = [
+	new World([
+		[ 55, 45, 305, 1 ],   [ 650, 260, 5, 1 ],   [ 125, 260, 525, 1 ],
+		[ 530, 65, 1, 135 ],  [ 690, 125, 230, 1 ], [ 745, 145, 1, 410 ],
+		[ 240, 295, 465, 1 ], [ 390, 335, 1, 155 ], [ 490, 395, 155, 1 ],
+		[ 125, 380, 1, 175 ], [ 485, 470, 185, 1 ], [ 90, 125, 320, 1 ],
+		[ 450, 45, 1, 135 ],  [ 240, 155, 1, 70 ],  [ 785, 0, 1, 105 ],
+		[ 610, 40, 1, 130 ],  [ 790, 235, 70, 1 ],  [ 885, 285, 1, 140 ],
+		[ 780, 360, 40, 1 ],  [ 825, 565, 150, 1 ], [ 740, 625, 145, 1 ],
+		[ 150, 585, 220, 1 ], [ 240, 405, 1, 70 ],  [ 435, 415, 1, 310 ],
+		[ 505, 445, 115, 1 ], [ 485, 425, 1, 60 ],  [ 700, 460, 1, 120 ],
+		[ 30, 680, 120, 1 ],  [ 35, 295, 75, 1 ],   [ 25, 100, 1, 145 ],
+		[ 15, 365, 1, 80 ],   [ 40, 555, 86, 1 ],   [ 305, 695, 1, 175 ],
+		[ 0, 775, 125, 1 ],   [ 15, 845, 150, 1 ],  [ 1000, 0, 1, 995 ],
+		[ 0, 0, 1000, 1 ],    [ 0, 0, 1, 1000 ],    [ 0, 1000, 1000, 1 ],
+		[ 1000, 0, 1, 1001 ], [ 1000, 0, 1, 1000 ], [ 595, 720, 275, 1 ],
+		[ 590, 550, 1, 60 ],  [ 455, 875, 440, 1 ], [ 765, 775, 1, 50 ],
+		[ 455, 775, 110, 1 ], [ 240, 720, 40, 1 ],  [ 120, 920, 285, 1 ],
+		[ 115, 905, 275, 1 ], [ 215, 735, 1, 145 ], [ 195, 735, 1, 165 ],
+		[ 195, 900, 1, 0 ],   [ 195, 900, 1, 5 ],   [ 485, 770, 1, 45 ],
+		[ 470, 645, 270, 1 ], [ 535, 535, 1, 35 ],  [ 825, 455, 1, 110 ],
+		[ 920, 195, 1, 125 ], [ 790, 430, 1, 90 ],  [ 920, 195, 1, 125 ],
+		[ 650, 775, 235, 1 ], [ 815, 815, 1, 60 ],  [ 940, 715, 1, 195 ],
+		[ 940, 350, 1, 140 ], [ 890, 530, 90, 1 ],  [ 965, 565, 1, 410 ],
+		[ 915, 160, 55, 1 ],  [ 970, 30, 1, 155 ]
+	], false, [[12, 12, 30, 30]]),
+	new World([
+		[ 0, 0, 1000, 1],     [ 0, 0, 1, 1000 ],
+		[ 0, 1000, 1000, 1],  [ 1000, 0, 1, 1000 ],
+		[ 80, 80, 1, 660 ],   [ 120, 840, 220, 1 ],
+		[ 420, 480, 1, 440 ], [ 340, 260, 260, 1 ],
+		[ 760, 220, 1, 340 ], [ 40, 760, 120, 1 ],
+		[ 200, 200, 1, 520 ], [ 460, 740, 320, 1 ],
+		[ 520, 400, 1, 240 ], [ 600, 340, 1, 120 ],
+		[ 620, 620, 240, 1 ], [ 200, 80, 240, 1 ],
+		[ 460, 120, 340, 1 ], [ 900, 60, 1, 620 ],
+		[ 240, 380, 100, 1 ], [ 580, 380, 1, 460 ],
+		[ 280, 520, 220, 1 ], [ 140, 440, 80, 1 ],
+		[ 720, 680, 1, 220 ], [ 840, 680, 1, 140 ],
+		[ 800, 500, 200, 1 ], [ 140, 880, 1, 100 ],
+		[ 0, 920, 120, 1 ],   [ 920, 780, 80, 1 ],
+		[ 360, 0, 1, 20 ],    [ 0, 60, 1, 20 ],
+		[ 100, 0, 1, 20 ],    [ 820, 0, 1, 60 ],
+		[ 900, 100, 20, 1 ]
+	], false, [[12, 12, 30, 30]])
 ];
+
+const private_terrains = {
+	soccer: new World([
+		[ 408, 84, 1, 228 ],  [ 792, 84, 1, 228 ],  [ 132, 480, 144, 1 ],
+		[ 924, 480, 144, 1 ], [ 228, 312, 1, 84 ],  [ 972, 312, 1, 84 ],
+		[ 96, 156, 168, 1 ],  [ 936, 156, 168, 1 ], [ 144, 36, 96, 1 ],
+		[ 960, 36, 96, 1 ],   [ 300, 72, 1, 120 ],  [ 900, 72, 1, 120 ],
+		[ 324, 384, 156, 1 ], [ 720, 384, 156, 1 ], [ 72, 228, 168, 1 ],
+		[ 960, 228, 168, 1 ], [ 24, 348, 48, 1 ],   [ 1128, 348, 48, 1 ],
+		[ 60, 264, 1, 84 ],   [ 1140, 264, 1, 84 ], [ 108, 348, 204, 1 ],
+		[ 888, 348, 204, 1 ], [ 36, 24, 1, 36 ],    [ 1164, 24, 1, 36 ],
+		[ 360, 420, 1, 132 ], [ 840, 420, 1, 132 ], [ 420, 540, 120, 1 ],
+		[ 660, 540, 120, 1 ], [ 432, 420, 1, 72 ],  [ 768, 420, 1, 72 ],
+		[ 540, 384, 1, 96 ],  [ 660, 384, 1, 96 ],  [ 468, 288, 84, 1 ],
+		[ 648, 288, 84, 1 ],  [ 432, 192, 36, 1 ],  [ 732, 192, 36, 1 ],
+		[ 480, 24, 1, 84 ],   [ 720, 24, 1, 84 ],   [ 516, 84, 1, 84 ],
+		[ 684, 84, 1, 84 ],   [ 24, 408, 96, 1 ],   [ 1080, 408, 96, 1 ],
+		[ 36, 528, 84, 1 ],   [ 1080, 528, 84, 1 ], [ 48, 432, 1, 60 ],
+		[ 1152, 432, 1, 60 ], [ 228, 516, 1, 48 ],  [ 972, 516, 1, 48 ],
+		[ 84, 48, 1, 84 ],    [ 1116, 48, 1, 84 ],  [ 264, 264, 72, 1 ],
+		[ 864, 264, 72, 1 ],  [ 336, 0, 1, 72 ],    [ 864, 0, 1, 72 ],
+		[ 108, 528, 1, 60 ],  [ 1092, 528, 1, 60 ], [ 108, 576, 216, 1 ],
+		[ 876, 576, 216, 1 ], [ 300, 480, 1, 120 ], [ 900, 480, 1, 120 ],
+		[ 12, 96, 72, 1 ],    [ 1116, 96, 72, 1 ],  [ 0, 0, 1200, 1 ],
+		[ 0, 0, 1, 600 ],     [ 1200, 0, 1, 600 ],  [ 0, 600, 1201, 1 ]
+	], true,
+	[['#ff0000', [[10, 290, 20, 20]]], ['#0000ff', [[1170, 290, 20, 20]]]],
+	[[600 - Treasure.length / 2, 300 - Treasure.length / 2]])
+};

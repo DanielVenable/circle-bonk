@@ -24,7 +24,13 @@
 	<a href="/play"><button>Start Game</button></a>
 	<button id="join">Join a Private Game</button>
 	<form id="code" action="/play" hidden>
-		<label>Enter game id:<input name="code" id="input"></label>
+		<label>Enter game id:<input name="code" id="input"></label><br>
+		<label>And choose a mode if the game doesn't already exist
+			<select name="mode">
+				<option value="normal">Normal</option>
+				<option value="soccer">Soccer</option>
+			</select>
+		</label>
 		<input type="submit">
 	</form>
 </body>
