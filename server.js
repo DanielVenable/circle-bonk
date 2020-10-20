@@ -373,6 +373,11 @@ function overlap1d(x1, width1, x2, width2) {
 }
 
 const server = createServer(async (req, res) => {
+	if (req.headers['x-forwarded-proto'] !== 'https') {
+		res.statusCode = 308;
+		res.setHeader('Location', `https://${req.headers.host}${req.url}`);
+		return res.end();
+	}
 	res.setHeader('Content-Type', 'text/html');
 	res.statusCode = 200;
 	const { pathname, query } = parse(req.url, true);

@@ -133,11 +133,10 @@
 	function setup() {
 		play.hidden = false;
 		ws = new WebSocket(
-			`ws://${
+			`wss://${
 				location.hostname
 			}:${
-				window.location.port ||
-					(window.location.protocol === 'http:' ? '80' : '443')
+				window.location.port
 			}/?username=${
 				encodeURIComponent(
 					localStorage.display_name = usernameinput.value)
