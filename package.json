@@ -22,5 +22,8 @@
   "bugs": {
     "url": "https://github.com/DanielVenable/Multiplayer-game/issues"
   },
-  "homepage": "https://github.com/DanielVenable/Multiplayer-game#readme"
+  "homepage": "https://github.com/DanielVenable/Multiplayer-game#readme",
+  "dependencies": {
+    "ws": "7.3.1"
+  }
 }
