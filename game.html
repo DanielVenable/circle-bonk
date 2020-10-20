@@ -95,6 +95,8 @@
 		treasure_pos = [],
 		ws, my_id,
 		walls = [],
+		teams = [],
+		goals = [],
 		angle = 0,
 		playing = false;
 
@@ -173,6 +175,9 @@
 				players.delete(id);
 			} else if (type === 'wall') {
 				walls = message;
+			} else if (type === 'goal') {
+				teams = color;
+				goals = message;
 			} else if (type === 'die') {
 				const player = players.get(id);
 				player.death_date = Date.now();
@@ -196,6 +201,13 @@
 			ctx.resetTransform();
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 			ctx.restore();
+
+			for (let i = 0; i < teams.length; i++) {
+				ctx.fillStyle = teams[i];
+				for (const goal of goals[i]) {
+					ctx.fillRect(...goal);
+				}
+			}
 
 			ctx.fillStyle = '#000000';
 

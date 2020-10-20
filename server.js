@@ -32,6 +32,10 @@ class Game {
 		for (const treasure of this.world.treasures) {
 			this.treasures.push(new Treasure(this, ...treasure));
 		}
+
+		if (this.world.teams) {
+			this.scores = new Array(this.world.teams.length).fill(0);
+		}
 		new Player(ws, this, username);
 	}
 
@@ -60,6 +64,22 @@ class Game {
 			treasure.speed[0] *= Game.friction;
 			treasure.speed[1] *= Game.friction;
 			treasure.bounce_off_walls();
+			if (this.world.teams) {
+				team_loop: for (let i = 0; i < this.world.goals.length; i++) {
+					for (const [x, y, width, height] of this.world.goals[i]) {
+						if (overlap1d(x, width,
+								treasure.position[0], Treasure.length) &&
+							overlap1d(y, height,
+								treasure.position[1], Treasure.length)) {
+							treasure.position = this.world.treasures[
+								this.treasures.indexOf(treasure)];
+							treasure.speed = [0, 0];
+							this.scores[i]++;
+							break team_loop;
+						}
+					}
+				}
+			}
 		}
 
 		const arr = [...this.players];
@@ -137,9 +157,9 @@ class Game {
 	}
 
 	get_color() {
-		if (this.world.do_teams) {
+		if (this.world.teams) {
 			const team_numbers = new Map;
-			for (const color of this.world.spawn_map.keys()) {
+			for (const color of this.world.teams) {
 				team_numbers.set(color, 0);
 			}
 			for (const { color } of this.all_players()) {
@@ -159,8 +179,9 @@ class Game {
 	}
 
 	get_position(color) {
-		if (this.world.do_teams) {
-			return random_position(this.world.spawn_map.get(color));
+		if (this.world.teams) {
+			return random_position(
+				this.world.spawn[this.world.teams.indexOf(color)]);
 		} else return random_position(this.world.spawn);
 	}
 
@@ -221,7 +242,7 @@ class Player extends Mobile {
 				this.username = String(data.username);
 				game.dead_guys.delete(this);
 				this.start();
-				if (!game.world.do_teams) this.color = random_color();
+				if (!game.world.teams) this.color = random_color();
 				this.position = game.get_position(this.color);
 				this.speed = [0, 0];
 			}
@@ -232,6 +253,12 @@ class Player extends Mobile {
 		ws.send(JSON.stringify({
 			type: 'wall',
 			message: game.world.walls
+		}));
+
+		if (game.world.teams) ws.send(JSON.stringify({
+			type: 'goal',
+			color: game.world.teams,
+			message: game.world.goals
 		}));
 	}
 
@@ -431,12 +458,12 @@ function random_array_elem(arr) {
 }
 
 class World {
-	constructor(walls, do_teams, spawn, treasures = []) {
+	constructor(walls, spawn, treasures = [], teams, goals) {
 		this.walls = walls;
+		this.spawn = spawn;
 		this.treasures = treasures;
-		if (this.do_teams = do_teams) {
-			this.spawn_map = new Map(spawn);
-		} else this.spawn = spawn;
+		this.teams = teams;
+		this.goals = goals;
 	}
 }
 
@@ -465,7 +492,7 @@ const public_terrains = [
 		[ 650, 775, 235, 1 ], [ 815, 815, 1, 60 ],  [ 940, 715, 1, 195 ],
 		[ 940, 350, 1, 140 ], [ 890, 530, 90, 1 ],  [ 965, 565, 1, 410 ],
 		[ 915, 160, 55, 1 ],  [ 970, 30, 1, 155 ]
-	], false, [[12, 12, 30, 30]]),
+	], [[12, 12, 30, 30]]),
 	new World([
 		[ 0, 0, 1000, 1],     [ 0, 0, 1, 1000 ],
 		[ 0, 1000, 1000, 1],  [ 1000, 0, 1, 1000 ],
@@ -484,7 +511,7 @@ const public_terrains = [
 		[ 360, 0, 1, 20 ],    [ 0, 60, 1, 20 ],
 		[ 100, 0, 1, 20 ],    [ 820, 0, 1, 60 ],
 		[ 900, 100, 20, 1 ]
-	], false, [[12, 12, 30, 30]])
+	], [[12, 12, 30, 30]])
 ];
 
 const private_terrains = {
@@ -511,7 +538,8 @@ const private_terrains = {
 		[ 876, 576, 216, 1 ], [ 300, 480, 1, 120 ], [ 900, 480, 1, 120 ],
 		[ 12, 96, 72, 1 ],    [ 1116, 96, 72, 1 ],  [ 0, 0, 1200, 1 ],
 		[ 0, 0, 1, 600 ],     [ 1200, 0, 1, 600 ],  [ 0, 600, 1201, 1 ]
-	], true,
-	[['#ff0000', [[10, 290, 20, 20]]], ['#0000ff', [[1170, 290, 20, 20]]]],
-	[[600 - Treasure.length / 2, 300 - Treasure.length / 2]])
+	], [[[10, 290, 20, 20]], [[1170, 290, 20, 20]]],
+	[[600 - Treasure.length / 2, 300 - Treasure.length / 2]],
+	['#ff0000', '#0000ff'],
+	[[[1170, 290, 20, 20]], [[10, 290, 20, 20]]])
 };
