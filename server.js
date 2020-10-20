@@ -397,7 +397,7 @@ const server = createServer(async (req, res) => {
 const ws_server = new Server({ server });
 
 server.listen(port, () =>
-	console.log('Server running on http://localhost:%d', port));
+	console.log('Server running on port %d', port));
 
 const private_games = new Map, keys = new WeakMap, public_games = new Set;
 
