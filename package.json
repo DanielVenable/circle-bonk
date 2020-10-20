@@ -1,0 +1,26 @@
+{
+  "name": "multiplayer-circle-bonk",
+  "version": "1.0.0",
+  "description": "A multiplayer game where players are circle that move around a maze and knock other players into walls",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DanielVenable/Multiplayer-game.git"
+  },
+  "keywords": [
+    "multiplayer",
+    "game",
+    "circle",
+    "fun"
+  ],
+  "author": "Daniel Venable",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/DanielVenable/Multiplayer-game/issues"
+  },
+  "homepage": "https://github.com/DanielVenable/Multiplayer-game#readme"
+}
