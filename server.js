@@ -12,7 +12,8 @@ process.chdir(__dirname);
 const files = {
 	game: readFile('game.html').then(String),
 	home: readFile('home-page.html').then(String),
-	favicon: readFile('favicon.svg').then(String)
+	favicon: readFile('favicon.svg').then(String),
+	chatbox: readFile('chatbox.html').then(String)
 }
 
 class Game {
@@ -21,7 +22,8 @@ class Game {
 	dead_guys = new Set;
 	treasures = [];
 
-	constructor(ws, username, type = 'normal') {
+	constructor(ws, username, is_public, type = 'normal') {
+		this.is_public = is_public;
 		this.ticker = setInterval(this.tick.bind(this), Game.tick_length);
 		if (type === 'normal') {
 			this.world = public_terrains[Math.floor(Math.random() * public_terrains.length)];
@@ -230,7 +232,7 @@ class Player extends Mobile {
 			} catch {
 				return;
 			}
-			if (data.type === 'message') {
+			if (data.type === 'message' && !game.is_public) {
 				game.send_to_all('message', this, false, false, String(data.message));
 			} else if (data.type === 'position') {
 				const norm = Math.sqrt(data.x ** 2 + data.y ** 2);
@@ -385,9 +387,12 @@ const server = createServer(async (req, res) => {
 		case '/': return res.end(await files.home);
 		case '/play': {
 			return res.end(
-				format(await files.game, (query.code ? 
-					'&id=' + encodeURIComponent(query.code) : '') + 
-					(query.mode ? '&mode=' + encodeURIComponent(query.mode) : '')));
+				format(await files.game,
+					query.code === undefined ? '' : await files.chatbox,
+					(query.code ?
+						'&id=' + encodeURIComponent(query.code) : '') + 
+						(query.mode ?
+							'&mode=' + encodeURIComponent(query.mode) : '')));
 		}
 		case '/favicon.svg': {
 			res.setHeader('Content-Type', 'image/svg+xml');
@@ -415,7 +420,7 @@ ws_server.on('connection', (ws, req) => {
 		const game = private_games.get(id);
 		if (game) new Player(ws, game, username);
 		else {
-			const game = new Game(ws, username, mode);
+			const game = new Game(ws, username, false, mode);
 			private_games.set(id, game);
 			keys.set(game, id);
 		}
@@ -425,7 +430,7 @@ ws_server.on('connection', (ws, req) => {
 				return new Player(ws, game, username);
 			}
 		}
-		public_games.add(new Game(ws, username));	
+		public_games.add(new Game(ws, username, true));	
 	}
 });
 

@@ -8,13 +8,14 @@
 		A multiplayer game where players use the arrow keys to navigate a
 		maze and knock other players into walls.">
 	<link rel="icon" href="favicon.svg" sizes="any" type="image/svg+xml">
-	<title>Multiplayer game</title>
+	<title>Circle Bonk</title>
 	<style>
 		span {
 			font-style: italic;
 		}
 		#play:not([hidden]) {
 			display: flex;
+			flex-direction: row-reverse;
 			justify-content: center;
 		}
 		body {
@@ -38,9 +39,12 @@
 			position: relative;
 			width: 25%;
 		}
-		canvas {
-			width: 75%;
+		#canvas {
+			width: 100%;
 			border: 5px solid rgb(0, 255, 0);
+		}
+		#chatcontainer + #canvas {
+			width: 75%;
 		}
 		#chatinput {
 			position: absolute;
@@ -64,11 +68,8 @@
 		</label>
 	</p>
 	<div id="play" hidden>
+		%s
 		<canvas width="3000" height="2000" id="canvas"></canvas>
-		<div id="chatcontainer">
-			<div id="chatbox"></div>
-			<input id="chatinput">
-		</div>
 	</div>
 </body>
 
@@ -257,28 +258,6 @@
 			}
 		}
 
-		function chat_listener({ key }) {
-			if (key === 'Enter') {
-				ws.send(JSON.stringify({
-					type: 'message',
-					message: chatinput.value
-				}));
-				append_chat(chatinput.value);
-				chatinput.value = '';
-			}
-		}
-
-		chatinput.addEventListener('keydown', chat_listener);
-
-		function append_chat(text, username) {
-			const elem = document.createElement('p');
-			const name = document.createElement(username === undefined ? 'span' : 'b');
-			name.textContent = (username === undefined ? '(You)' : username) + ': ';
-			elem.appendChild(name);
-			elem.insertAdjacentText('beforeend', text);
-			chatbox.prepend(elem);
-		}
-
 		function handle_key(event, is_down) {
 			if (keys.has(event.code)) {
 				keys_down[is_down ? 'add' : 'delete'](event.code);
@@ -292,7 +271,9 @@
 					x: Math.cos(angle) * accel,
 					y: Math.sin(angle) * accel
 				}));
-			} else if (event.target !== chatinput && playing) chatinput.focus();
+			} else if (chatbox && event.target !== chatinput && playing) {
+				chatinput.focus();
+			}
 		}
 
 		setInterval(() => {
@@ -302,6 +283,32 @@
 
 		setInterval(update, 50);
 		resize();
+
+		if (chatbox) {
+			function chat_listener({ key }) {
+				if (key === 'Enter') {
+					ws.send(JSON.stringify({
+						type: 'message',
+						message: chatinput.value
+					}));
+					append_chat(chatinput.value);
+					chatinput.value = '';
+				}
+			}
+
+			chatinput.addEventListener('keydown', chat_listener);
+
+			function append_chat(text, username) {
+				const elem = document.createElement('p');
+				const name = document.createElement(
+					username === undefined ? 'span' : 'b');
+				name.textContent =
+					(username === undefined ? '(You)' : username) + ': ';
+				elem.appendChild(name);
+				elem.insertAdjacentText('beforeend', text);
+				chatbox.prepend(elem);
+			}
+		}
 	}
 
 	window.addEventListener('resize', resize);
