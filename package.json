@@ -4,7 +4,7 @@
   "description": "A multiplayer game where players are circle that move around a maze and knock other players into walls",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "PORT=3000 node server.js",
     "start": "node server.js"
   },
   "repository": {
