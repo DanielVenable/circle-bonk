@@ -1,0 +1,6 @@
+<svg version="1.1" width="560" height="120" xmlns="http://www.w3.org/2000/svg">
+    <text font-size="100px" font-family="arial" y="100">Circle B</text>
+    <circle cx="400" cy="70" r="50" fill="hsl(0,100%,45%)"/>
+    <line x1="400" y1="70" x2="450" y2="70" style="stroke-width:10px" stroke="black"/>
+    <text font-size="100px" font-family="arial" x="450" y="100">nk</text>
+</svg>
