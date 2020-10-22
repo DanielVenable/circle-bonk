@@ -18,9 +18,18 @@
 			font-size: x-large;
 			margin: 3vh;
 		}
+		svg {
+			width: 20em;
+		}
 	</style>
 </head>
 <body>
+	<svg viewbox="0 0 56 12">
+		<text font-size="10px" font-family="arial" y="10">Circle B</text>
+		<circle cx="40" cy="7" r="5" fill="%s"/>
+		<line x1="40" y1="7" x2="45" y2="7" stroke="black"/>
+		<text font-size="10px" font-family="arial" x="45" y="10">nk</text>
+	</svg>
 	<a href="/play"><button>Start Game</button></a>
 	<button id="join">Join a Private Game</button>
 	<form id="code" action="/play" hidden>
@@ -33,6 +42,33 @@
 		</label>
 		<input type="submit">
 	</form>
+	<div>
+		<h1>Circle Bonk</h1>
+		<p>
+			Circle Bonk is a multiplayer game where players are circles that navigate a
+			maze and try to knock other players into walls.
+		</p>
+		<h2>How to play</h2>
+		<p>
+			Use the left and right arrow keys to turn and the up and down arrow keys to accelerate.
+			Don't touch walls!
+			Have fun!
+		</p>
+		<h3>
+			Public games
+		</h3>
+		<p>
+			To join a public game, click the "Start Game" button.
+		</p>
+		<h3>
+			Starting the game
+		</h3>
+		<p>
+			Type your display name into the blank and hit enter to start the game.
+			If you die, the display name blank will reappear.
+			Choose a new display name or just hit enter to start again.
+		</p>
+	</div>
 </body>
 <script>
 	const [join, code, input] = ['join', 'code', 'input']

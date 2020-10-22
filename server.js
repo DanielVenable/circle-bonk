@@ -375,7 +375,8 @@ function overlap1d(x1, width1, x2, width2) {
 }
 
 const server = createServer(async (req, res) => {
-	if (req.headers['x-forwarded-proto'] !== 'https') {
+	if (req.headers['x-forwarded-proto'] !== 'https' &&
+		process.env.NODE_ENV === 'production') {
 		res.statusCode = 308;
 		res.setHeader('Location', `https://${req.headers.host}${req.url}`);
 		return res.end();
@@ -384,8 +385,11 @@ const server = createServer(async (req, res) => {
 	res.statusCode = 200;
 	const { pathname, query } = parse(req.url, true);
 	switch (pathname) {
-		case '/': return res.end(await files.home);
-		case '/play': {
+		case '/':
+			return res.end(
+				format(await files.home,
+					random_color()));
+		case '/play':
 			return res.end(
 				format(await files.game,
 					query.code === undefined ? '' : await files.chatbox,
@@ -393,7 +397,6 @@ const server = createServer(async (req, res) => {
 						'&id=' + encodeURIComponent(query.code) : '') + 
 						(query.mode ?
 							'&mode=' + encodeURIComponent(query.mode) : '')));
-		}
 		case '/favicon.svg': {
 			res.setHeader('Content-Type', 'image/svg+xml');
 			return res.end(format(await files.favicon, random_color()));

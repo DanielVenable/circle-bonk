@@ -15,7 +15,6 @@
 		}
 		#play:not([hidden]) {
 			display: flex;
-			flex-direction: row-reverse;
 			justify-content: center;
 		}
 		body {
@@ -40,11 +39,8 @@
 			width: 25%;
 		}
 		#canvas {
-			width: 100%;
-			border: 5px solid rgb(0, 255, 0);
-		}
-		#chatcontainer + #canvas {
 			width: 75%;
+			border: 5px solid rgb(0, 255, 0);
 		}
 		#chatinput {
 			position: absolute;
@@ -68,8 +64,8 @@
 		</label>
 	</p>
 	<div id="play" hidden>
-		%s
 		<canvas width="3000" height="2000" id="canvas"></canvas>
+		%s
 	</div>
 </body>
 
@@ -134,8 +130,8 @@
 	function setup() {
 		play.hidden = false;
 		ws = new WebSocket(
-			`wss://${
-				location.hostname
+			`ws${window.location.protocol === 'http:' ? '' : 's' }://${
+				window.location.hostname
 			}:${
 				window.location.port
 			}/?username=${
