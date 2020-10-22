@@ -29,5 +29,5 @@ If you don't, you can install it [here](https://nodejs.org).
 1. Clone or download this repository.
 2. Using a command line or terminal, navigate to the directory of the repository.
 3. Type "npm install".
-4. To run the app, type "npm test".
+4. To run the app, type "npm start".
 5. Go to [localhost:3000](http://localhost:3000) and start playing!

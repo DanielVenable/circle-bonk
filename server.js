@@ -5,7 +5,7 @@ const { format } = require('util'),
 	{ createServer } = require('http'),
 	{ readFile } = require('fs').promises,
 	{ parse } = require('url'),
-	port = +process.env.PORT || 80;
+	port = +process.env.PORT || 3000;
 
 process.chdir(__dirname);
 
