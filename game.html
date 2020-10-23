@@ -319,30 +319,28 @@
 		setInterval(update, 50);
 		resize();
 
-		if (chatbox) {
-			function chat_listener({ key }) {
-				if (key === 'Enter') {
-					ws.send(JSON.stringify({
-						type: 'message',
-						message: chatinput.value
-					}));
-					append_chat(chatinput.value);
-					chatinput.value = '';
-				}
+		function chat_listener({ key }) {
+			if (key === 'Enter') {
+				ws.send(JSON.stringify({
+					type: 'message',
+					message: chatinput.value
+				}));
+				append_chat(chatinput.value);
+				chatinput.value = '';
 			}
+		}
 
-			chatinput.addEventListener('keydown', chat_listener);
+		if (chatbox) chatinput.addEventListener('keydown', chat_listener);
 
-			function append_chat(text, username) {
-				const elem = document.createElement('p');
-				const name = document.createElement(
-					username === undefined ? 'span' : 'b');
-				name.textContent =
-					(username === undefined ? '(You)' : username) + ': ';
-				elem.appendChild(name);
-				elem.insertAdjacentText('beforeend', text);
-				chatbox.prepend(elem);
-			}
+		function append_chat(text, username) {
+			const elem = document.createElement('p');
+			const name = document.createElement(
+				username === undefined ? 'span' : 'b');
+			name.textContent =
+				(username === undefined ? '(You)' : username) + ': ';
+			elem.appendChild(name);
+			elem.insertAdjacentText('beforeend', text);
+			chatbox.prepend(elem);
 		}
 	}
 
