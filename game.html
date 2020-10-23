@@ -28,11 +28,29 @@
 			display: flex;
 			flex-direction: column-reverse;
 			position: absolute;
-			top: 0;
+			top: 20%;
 			bottom: 20px;
 			left: 0;
 			right: 0;
 			overflow: auto;
+		}
+		#info {
+			border: 1px solid black;
+			position: absolute;
+			top: 0;
+			left: 0;
+			right: 0;
+			height: 100%;
+			overflow: auto;
+		}
+		ol {
+			margin: 0;
+		}
+		#info > div {
+			margin: 0.2em;
+		}
+		#chatinput + #info {
+			height: 20%;
 		}
 		#chatcontainer {
 			position: relative;
@@ -65,7 +83,15 @@
 	</p>
 	<div id="play" hidden>
 		<canvas width="3000" height="2000" id="canvas"></canvas>
-		%s
+		<div id="chatcontainer">
+			%s
+			<div id="info">
+				<div class="margin">
+					Leaderboard:
+				</div>
+				<ol id="players"></ol>
+			</div>
+		</div>
 	</div>
 </body>
 
@@ -73,8 +99,8 @@
 'use strict';
 
 {
-	const [chatbox, chatinput, usernameinput, play, start_screen, canvas] =
-		['chatbox', 'chatinput', 'displayname', 'play', 'start', 'canvas']
+	const [chatbox, chatinput, usernameinput, play, start_screen, canvas, player_list] =
+		['chatbox', 'chatinput', 'displayname', 'play', 'start', 'canvas', 'players']
 			.map(document.getElementById.bind(document)),
 		keys = new Set([
 			'ArrowUp',
@@ -150,6 +176,7 @@
 			} else if (type === 'player') {
 				set_property(id, 'username', name);
 				set_property(id, 'color', color);
+				update_player_list();
 			} else if (type === 'position') {
 				on_screen = new Set();
 				if (pos) on_screen.add(my_id);
@@ -169,6 +196,7 @@
 				set_property(id, 'username', usernameinput.value);
 			} else if (type === 'bye') {
 				players.delete(id);
+				update_player_list();
 			} else if (type === 'wall') {
 				walls = message;
 			} else if (type === 'goal') {
@@ -186,6 +214,7 @@
 					usernameinput.select();
 					resize();
 				}
+				update_player_list();
 				setTimeout(() => dead_guys.delete(player), 1000);
 			} else if (type === 'leave') {
 				on_screen.delete(id);
@@ -269,6 +298,16 @@
 				}));
 			} else if (chatbox && event.target !== chatinput && playing) {
 				chatinput.focus();
+			}
+		}
+
+		function update_player_list() {
+			player_list.textContent = '';
+			for (const { username } of players.values()) {
+				if (username === undefined) continue;
+				const elem = document.createElement('li');
+				elem.textContent = username;
+				player_list.appendChild(elem);
 			}
 		}
 

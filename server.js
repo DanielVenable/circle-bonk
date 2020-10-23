@@ -279,7 +279,7 @@ class Player extends Mobile {
 
 		this.game.players.add(this);
 
-		for (const player of this.game.all_players()) {
+		for (const player of this.game.players) {
 			this.ws.send(JSON.stringify({
 				type: 'player',
 				id: player.id,
