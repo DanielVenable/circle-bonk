@@ -230,6 +230,12 @@
 			}
 		}
 
+		ws.onclose = () => {
+			if (confirm('Oh no! The connection is lost. Click OK to reload')) {
+				window.location.reload();
+			}
+		}
+
 		function update() {
 			ctx.save();
 			ctx.resetTransform();
