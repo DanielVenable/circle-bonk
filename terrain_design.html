@@ -18,14 +18,17 @@
 </head>
 
 <body>
-	<canvas height="1000" width="1000"></canvas>
-	<button>get output</button>
-	<div></div>
+	<canvas height="1000" width="1000"></canvas><br>
+	<button>get and copy JSON output</button>
+	<input>
 </body>
 
 <script>
+	'use strict';
+
 	const canvas = document.querySelector('canvas');
 	const ctx = canvas.getContext('2d');
+	const input = document.querySelector('input');
 	const stuff = [];
 	let next_coords = null;
 
@@ -33,7 +36,7 @@
 		const coords = get_coords(canvas, event);
 		if (next_coords) {
 			const [x1, y1, x, y] = next_coords.concat(coords)
-				.map(n => Math.floor(n/20) * 20);
+				.map(n => Math.round(n/20) * 20);
 			const arr = Math.abs(x - x1) > Math.abs(y - y1) ?
 				[Math.min(x, x1), Math.min(y, y1), Math.abs(x - x1), 1] :
 				[Math.min(x, x1), Math.min(y, y1), 1, Math.abs(y - y1)];
@@ -52,7 +55,16 @@
 	}
 
 	document.querySelector('button').addEventListener('click', () => {
-		document.querySelector('div').textContent = JSON.stringify(stuff);
+		input.value = JSON.stringify(stuff);
+		input.select();
+		document.execCommand('copy');
+	});
+
+	document.addEventListener('keydown', ({ ctrlKey, key }) => {
+		if (ctrlKey && key === 'z') {
+			ctx.clearRect(...stuff.pop());
+			next_coords = null;
+		}
 	});
 </script>
 
