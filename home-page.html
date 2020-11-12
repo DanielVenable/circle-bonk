@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<link rel="icon" href="favicon.svg" sizes="any" type="image/svg+xml">
+	<link rel="icon" href="/favicon.svg" sizes="any" type="image/svg+xml">
 	<meta name="description" content="
 		A multiplayer game where players use the arrow keys to navigate a
 		maze and knock other players into walls.">
@@ -14,9 +14,9 @@
 			flex-direction: column;
 			align-items: center;
 		}
-		button {
+		body > button, a > button {
 			font-size: x-large;
-			margin: 3vh;
+			margin: 1em;
 		}
 		svg {
 			width: 20em;
@@ -24,6 +24,9 @@
 	</style>
 </head>
 <body>
+	<noscript>
+		You must enable javascript to play this game.
+	</noscript>
 	<svg viewbox="0 0 56 12">
 		<text font-size="10px" font-family="arial" y="10">Circle B</text>
 		<circle cx="40" cy="7" r="5" fill="%s"/>
@@ -31,17 +34,24 @@
 		<text font-size="10px" font-family="arial" x="45" y="10">nk</text>
 	</svg>
 	<a href="/play"><button>Start Game</button></a>
-	<button id="join">Join a Private Game</button>
-	<form id="code" action="/play" hidden>
-		<label>Enter game id:<input name="code" id="input"></label><br>
-		<label>And choose a mode if the game doesn't already exist
-			<select name="mode">
-				<option value="normal">Normal</option>
-				<option value="soccer">Soccer</option>
-			</select>
-		</label>
-		<input type="submit">
-	</form>
+	<button id="join_btn">Join a Private Game</button>
+	<div id="join" hidden>
+		Enter code:
+		<input id="input">
+	</div>
+	<button id="new_btn">Start a New Private Game</button>
+	<div id="new" hidden>
+		Choose a world:
+		<select id="select">
+			<option>soccer</option>
+			<option>normal</option>
+		</select>
+		<button id="submit">Submit</button>
+		<p id="codebox" hidden>
+			Code: <input id="code" readonly><br>
+			Url: <a id="url"></a>
+		</p>
+	</div>
 	<div>
 		<h1>Circle Bonk</h1>
 		<p>
@@ -54,15 +64,35 @@
 			Don't touch walls!
 			Have fun!
 		</p>
-		<h3>
-			Public games
-		</h3>
+		<h3>Public games</h3>
 		<p>
 			To join a public game, click the "Start Game" button.
 		</p>
-		<h3>
-			Starting the game
-		</h3>
+		<h2>Private games</h2>
+		<h3>Creating a Private Game</h3>
+		<p>
+			To create a private game, click the "Start a New Private Game" button.
+			Choose the world you want to play in, and click the "Submit" button.
+			A code and a url should appear.
+			Send the code or url to your friends to invite them to the game.
+		</p>
+		<h3>Joining a Private Game</h3>
+		<p>
+			There are two ways to join a private game.
+			<ol>
+				<li>Click on the link given when the game was created.</li>
+				<li>
+					Click the "Join a Private Game" button,
+					type in the code given when the game was created, and hit enter.
+				</li>
+			</ol> 
+		</p>
+		<h3>Chat</h3>
+		<p>
+			When you are in a private game, you can chat with the other players.
+			Type in a message, then hit enter to send.
+		</p>
+		<h3>Starting the game</h3>
 		<p>
 			Type your display name into the blank and hit enter to start the game.
 			If you die, the display name blank will reappear.
@@ -71,12 +101,40 @@
 	</div>
 </body>
 <script>
-	const [join, code, input] = ['join', 'code', 'input']
+	const [join_btn, join, input, new_btn, new_game, select,
+			submit, codebox, code, url] =
+		['join_btn', 'join', 'input', 'new_btn', 'new', 'select',
+			'submit', 'codebox', 'code', 'url']
 		.map(document.getElementById.bind(document));
 
-	join.addEventListener('click', () => {
-		code.hidden = !code.hidden;
+	join_btn.addEventListener('click', () => {
+		if (!(join.hidden = !join.hidden)) new_game.hidden = true;
 		input.select();
+	});
+	new_btn.addEventListener('click', () => {
+		if (!(new_game.hidden = !new_game.hidden)) join.hidden = true;
+	});
+
+	input.addEventListener('keydown', ({ key }) => {
+		if (key === 'Enter' && /^[\w\-]+$/.test(input.value)) {
+			window.location.href =
+				`${window.location.origin}/play/${input.value}`;
+		}
+	});
+
+	submit.addEventListener('click', () => {
+		const xhttp = new XMLHttpRequest();
+		xhttp.onreadystatechange = () => {
+			if (xhttp.readyState === 4 && xhttp.status === 200) {
+				codebox.hidden = false;
+				code.value = xhttp.response;
+				code.select();
+				url.href = `/play/${xhttp.response}`;
+				url.textContent = url.href;
+			}
+		}
+		xhttp.open('GET', `/code/${select.value}`);
+		xhttp.send();
 	});
 </script>
 </html>

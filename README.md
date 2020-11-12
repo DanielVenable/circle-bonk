@@ -13,6 +13,27 @@ Have fun!
 
 To join a public game, click the "Start Game" button.
 
+## Private games
+
+### Creating a Private Game
+
+To create a private game, click the "Start a New Private Game" button.
+Choose the world you want to play in, and click the "Submit" button.
+A code and a url should appear.
+Send the code or url to your friends to invite them to the game.
+
+### Joining a Private Game
+
+There are two ways to join a private game.
+1. Click on the link given when the game was created.
+2. Click the "Join a Private Game" button,
+type in the code given when the game was created, and hit enter.
+
+### Chat
+
+When you are in a private game, you can chat with the other players.
+Type in a message, then hit enter to send.
+
 ## Starting the game
 
 Type your display name into the blank and hit enter to start the game.

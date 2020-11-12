@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="icon" href="/favicon.svg" sizes="any" type="image/svg+xml">
+	<title>Circle Bonk</title>
+	<style>
+		body {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			flex-direction: column;
+		}
+	</style>
+</head>
+
+<body>
+	<h1>Oh no! This game does not exist.</h1>
+	<h1>Make sure you have the correct code.</h1>
+	<input value="%s">
+	<h1>Or click <a href="/">here</a> to go home.</h1>
+</body>
+
+<script>
+	const input = document.querySelector('input');
+	input.select();
+	input.addEventListener('keydown', ({ key }) => {
+		if (key === 'Enter' && /^[\w\-]+$/.test(input.value)) {
+			window.location.href =
+				`${window.location.origin}/play/${input.value}`;
+		}
+	});
+</script>
+
+</html>

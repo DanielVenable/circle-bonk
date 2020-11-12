@@ -1,19 +1,21 @@
 'use strict';
 
+process.chdir(__dirname);
+
 const { format } = require('util'),
 	{ Server } = require('ws'),
 	{ createServer } = require('http'),
 	{ readFile } = require('fs').promises,
 	{ parse } = require('url'),
+	{ sign, verify } = require('./code-generate'),
 	port = +process.env.PORT || 3000;
-
-process.chdir(__dirname);
 
 const files = {
 	game: readFile('game.html').then(String),
 	home: readFile('home-page.html').then(String),
 	favicon: readFile('favicon.svg').then(String),
-	chatbox: readFile('chatbox.html').then(String)
+	chatbox: readFile('chatbox.html').then(String),
+	no_exist: readFile('no-exist.html').then(String)
 }
 
 class Game {
@@ -383,27 +385,30 @@ const server = createServer(async (req, res) => {
 	}
 	res.setHeader('Content-Type', 'text/html');
 	res.statusCode = 200;
-	const { pathname, query } = parse(req.url, true);
-	switch (pathname) {
+	switch (req.url) {
 		case '/':
-			return res.end(
-				format(await files.home,
-					random_color()));
+			return res.end(format(await files.home, random_color()));
 		case '/play':
-			return res.end(
-				format(await files.game,
-					query.code === undefined ? '' : await files.chatbox,
-					(query.code ?
-						'&id=' + encodeURIComponent(query.code) : '') + 
-						(query.mode ?
-							'&mode=' + encodeURIComponent(query.mode) : '')));
-		case '/favicon.svg': {
+			return res.end(format(await files.game, '', ''));
+		case '/favicon.svg':
 			res.setHeader('Content-Type', 'image/svg+xml');
 			return res.end(format(await files.favicon, random_color()));
-		}
 		default:
-			res.statusCode = 404;
-			return res.end();
+			let regexp;
+			if (regexp = req.url.match(/^\/code\/([\w\-]+)$/)) {
+				res.setHeader('Content-Type', 'text/plain');
+				return res.end(await sign(regexp[1]));
+			} else if (regexp = req.url.match(/^\/play\/([\w\-]+)$/)) {
+				return res.end(
+					verify(regexp[1]) === undefined ?
+						format(await files.no_exist, regexp[1]) :
+						format(await files.game,
+							await files.chatbox,
+							'&id=' + regexp[1]));
+			} else {
+				res.statusCode = 404;
+				return res.end();
+			}
 	}
 });
 
@@ -415,7 +420,7 @@ server.listen(port, () =>
 const private_games = new Map, keys = new WeakMap, public_games = new Set;
 
 ws_server.on('connection', (ws, req) => {
-	let { username, id, mode } = parse(req.url, true).query;
+	let { username, id } = parse(req.url, true).query;
 	username = String(username);
 	if (username.length > Player.max_name_length) return;
 	if (id) {
@@ -423,9 +428,12 @@ ws_server.on('connection', (ws, req) => {
 		const game = private_games.get(id);
 		if (game) new Player(ws, game, username);
 		else {
-			const game = new Game(ws, username, false, mode);
-			private_games.set(id, game);
-			keys.set(game, id);
+			const mode = verify(id);
+			if (mode) {
+				const game = new Game(ws, username, false, mode);
+				private_games.set(id, game);
+				keys.set(game, id);
+			}
 		}
 	} else {
 		for (const game of public_games) {
