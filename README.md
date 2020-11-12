@@ -34,6 +34,14 @@ type in the code given when the game was created, and hit enter.
 When you are in a private game, you can chat with the other players.
 Type in a message, then hit enter to send.
 
+### Teams
+
+Some private games have teams. All players on a team are the same color.
+To score points for your team, push the "treasure", a yellow square,
+to a rectangular area the same color as you.
+Your team will gain one point, and the treasure will go back to its starting point.
+Work together with your teammates to get as many points as possible.
+
 ## Starting the game
 
 Type your display name into the blank and hit enter to start the game.

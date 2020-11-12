@@ -10,7 +10,7 @@
 	<link rel="icon" href="/favicon.svg" sizes="any" type="image/svg+xml">
 	<title>Circle Bonk</title>
 	<style>
-		span {
+		#chatbox span {
 			font-style: italic;
 		}
 		#play:not([hidden]) {
@@ -86,6 +86,9 @@
 		<div id="chatcontainer">
 			%s
 			<div id="info">
+				<div class="margin" id="scoreboard" hidden>
+					Score: <span id="scores"></span>
+				</div>
 				<div class="margin">
 					Leaderboard:
 				</div>
@@ -99,8 +102,10 @@
 'use strict';
 
 {
-	const [chatbox, chatinput, usernameinput, play, start_screen, canvas, player_list] =
-		['chatbox', 'chatinput', 'displayname', 'play', 'start', 'canvas', 'players']
+	const [chatbox, chatinput, usernameinput, play,
+			start_screen, canvas, player_list, score_list, scoreboard] =
+		['chatbox', 'chatinput', 'displayname', 'play',
+			'start', 'canvas', 'players', 'scores', 'scoreboard']
 			.map(document.getElementById.bind(document)),
 		keys = new Set([
 			'ArrowUp',
@@ -171,53 +176,57 @@
 		ws.onmessage = ({ data }) => {
 			const { type, message, name, color, id, pos, treasures } =
 				JSON.parse(data);
-			if (type === 'message') {
-				append_chat(message, players.get(id).username);
-			} else if (type === 'player') {
-				set_property(id, 'username', name);
-				set_property(id, 'color', color);
-				update_player_list();
-			} else if (type === 'position') {
-				on_screen = new Set();
-				if (pos) on_screen.add(my_id);
-				treasure_pos = treasures;
-				for (const [id, pos] of message) {
-					on_screen.add(id);
-					set_property(id, 'position', pos);
-				}
-				if (pos) {
-					set_property(my_id, 'position', pos);
-					ctx.setTransform(scale, 0, 0, scale,
-						canvas.width  / 2 - pos[0] * scale,
-						canvas.height / 2 - pos[1] * scale);
-				}
-			} else if (type === 'id') {
-				my_id = id;
-				set_property(id, 'username', usernameinput.value);
-			} else if (type === 'bye') {
-				players.delete(id);
-				update_player_list();
-			} else if (type === 'wall') {
-				walls = message;
-			} else if (type === 'goal') {
-				teams = color;
-				goals = message;
-			} else if (type === 'die') {
-				const player = players.get(id);
-				player.death_date = Date.now();
-				dead_guys.add(player);
-				players.delete(id);
-				on_screen.delete(id);
-				if (id === my_id) {
-					playing = false;
-					start_screen.hidden = false;
-					usernameinput.select();
-					resize();
-				}
-				update_player_list();
-				setTimeout(() => dead_guys.delete(player), 1000);
-			} else if (type === 'leave') {
-				on_screen.delete(id);
+			switch (type) {
+				case 'message':
+					append_chat(message, players.get(id).username);
+				break; case 'player':
+					set_property(id, 'username', name);
+					set_property(id, 'color', color);
+					update_player_list();
+				break; case 'position':
+					on_screen = new Set();
+					if (pos) on_screen.add(my_id);
+					treasure_pos = treasures;
+					for (const [id, pos] of message) {
+						on_screen.add(id);
+						set_property(id, 'position', pos);
+					}
+					if (pos) {
+						set_property(my_id, 'position', pos);
+						ctx.setTransform(scale, 0, 0, scale,
+							canvas.width  / 2 - pos[0] * scale,
+							canvas.height / 2 - pos[1] * scale);
+					}
+				break; case 'bye':
+					players.delete(id);
+					update_player_list();
+				break; case 'start':
+					walls = message;
+					my_id = id;
+					set_property(id, 'username', usernameinput.value);
+				break; case 'goal':
+					teams = color;
+					goals = message;
+				break; case 'die':
+					const player = players.get(id);
+					player.death_date = Date.now();
+					dead_guys.add(player);
+					players.delete(id);
+					on_screen.delete(id);
+					if (id === my_id) {
+						playing = false;
+						start_screen.hidden = false;
+						usernameinput.select();
+						resize();
+					}
+					update_player_list();
+					setTimeout(() => dead_guys.delete(player), 1000);
+				break; case 'leave':
+					on_screen.delete(id);
+				break; case 'score':
+					update_score_list(message);
+				break; default:
+					throw new Error('Invalid type: ' + type);
 			}
 		}
 
@@ -308,6 +317,17 @@
 				const elem = document.createElement('li');
 				elem.textContent = username;
 				player_list.appendChild(elem);
+			}
+		}
+
+		function update_score_list(score) {
+			scoreboard.hidden = false;
+			score_list.textContent = '';
+			for (let i = 0; i < teams.length; i++) {
+				const elem = document.createElement('span');
+				elem.textContent = score[i] + ' ';
+				elem.style.color = teams[i];
+				score_list.appendChild(elem);
 			}
 		}
 
