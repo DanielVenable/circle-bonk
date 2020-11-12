@@ -70,25 +70,28 @@ class Game {
 			treasure.speed[1] *= Game.friction;
 			treasure.bounce_off_walls();
 			if (this.world.teams) {
-				team_loop: for (let i = 0; i < this.world.goals.length; i++) {
+				let scored = false;
+				for (let i = 0; i < this.world.goals.length; i++) {
 					for (const [x, y, width, height] of this.world.goals[i]) {
 						if (overlap1d(x, width,
 								treasure.position[0], Treasure.length) &&
 							overlap1d(y, height,
 								treasure.position[1], Treasure.length)) {
-							treasure.position = this.world.treasures[
-								this.treasures.indexOf(treasure)];
-							treasure.speed = [0, 0];
 							this.scores[i]++;
-							const message = JSON.stringify({
-								type: 'score',
-								message: this.scores
-							});
-							for (const { ws } of this.players) {
-								ws.send(message);
-							}
-							break team_loop;
+							scored = true;
 						}
+					}
+				}
+				if (scored) {
+					treasure.position = [...this.world.treasures[
+						this.treasures.indexOf(treasure)]];
+					treasure.speed = [0, 0];
+					const message = JSON.stringify({
+						type: 'score',
+						message: this.scores
+					});
+					for (const { ws } of this.players) {
+						ws.send(message);
 					}
 				}
 			}
@@ -527,7 +530,7 @@ const public_terrain = new World([
 ], [[12, 12, 30, 30]]);
 
 const private_terrains = new Map([
-	['soccer', new World([
+	['hard', new World([
 		[ 408, 84, 1, 228 ],  [ 792, 84, 1, 228 ],  [ 132, 480, 144, 1 ],
 		[ 924, 480, 144, 1 ], [ 228, 312, 1, 84 ],  [ 972, 312, 1, 84 ],
 		[ 96, 156, 168, 1 ],  [ 936, 156, 168, 1 ], [ 144, 36, 96, 1 ],
@@ -550,9 +553,23 @@ const private_terrains = new Map([
 		[ 876, 576, 216, 1 ], [ 300, 480, 1, 120 ], [ 900, 480, 1, 120 ],
 		[ 12, 96, 72, 1 ],    [ 1116, 96, 72, 1 ],  [ 0, 0, 1200, 1 ],
 		[ 0, 0, 1, 600 ],     [ 1200, 0, 1, 600 ],  [ 0, 600, 1201, 1 ]
-	], [[[10, 290, 20, 20]], [[1170, 290, 20, 20]]],
-	[[600 - Treasure.length / 2, 300 - Treasure.length / 2]],
-	['#ff0000', '#0000ff'],
-	[[[1170, 290, 20, 20]], [[10, 290, 20, 20]]])],
-	['']
+	],
+		[[[10, 290, 20, 20]], [[1170, 290, 20, 20]]],
+		[[600.5 - Treasure.length / 2, 300.5 - Treasure.length / 2]],
+		['#ff0000', '#0000ff'],
+		[[[1170, 290, 20, 20]], [[10, 290, 20, 20]]]
+	)],
+	['4-square', new World([
+		[ 0, 0, 360, 1 ],    [ 0, 0, 1, 360 ],
+		[ 360, 0, 1, 361 ],  [ 0, 360, 360, 1],
+		[ 100, 100, 1, 30 ], [ 230, 100, 30, 1 ],
+		[ 100, 260, 30, 1 ], [ 260, 230, 1, 30 ],
+	],
+		Array(4).fill([[ 10.5, 10.5, 340, 340 ]]),
+		[[180.5 - Treasure.length / 2, 180.5 - Treasure.length / 2]],
+		['hsl(0, 100%, 50%)', 'hsl(90, 100%, 30%)',
+			'hsl(180, 100%, 40%)', 'hsl(270, 100%, 50%'],
+		[[[ 2, 1, 357, 1 ]], [[ 359, 2, 1, 357 ]],
+			[[ 2, 359, 357, 1]], [[ 1, 2, 1, 357 ]]]
+	)]
 ]);
