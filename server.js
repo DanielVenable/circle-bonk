@@ -24,15 +24,10 @@ class Game {
 	dead_guys = new Set;
 	treasures = [];
 
-	constructor(ws, username, is_public, type = 'normal') {
+	constructor(ws, username, is_public, world = public_terrain) {
+		this.world = world;
 		this.is_public = is_public;
 		this.ticker = setInterval(this.tick.bind(this), Game.tick_length);
-		if (type === 'normal') this.world = public_terrain;
-		else {
-			const terrian = private_terrains.get(type);
-			if (!terrian) return;
-			this.world = terrian;
-		}
 
 		for (const treasure of this.world.treasures) {
 			this.treasures.push(new Treasure(this, ...treasure));
@@ -64,7 +59,9 @@ class Game {
 	}
 
 	tick() {
-		for (const treasure of this.treasures) {
+		const t_arr = [...this.treasures]
+		for (let i = 0; i < t_arr.length; i++) {
+			const treasure = t_arr[i];
 			add(treasure.position, treasure.speed);
 			treasure.speed[0] *= Game.friction;
 			treasure.speed[1] *= Game.friction;
@@ -73,10 +70,7 @@ class Game {
 				let scored = false;
 				for (let i = 0; i < this.world.goals.length; i++) {
 					for (const [x, y, width, height] of this.world.goals[i]) {
-						if (overlap1d(x, width,
-								treasure.position[0], Treasure.length) &&
-							overlap1d(y, height,
-								treasure.position[1], Treasure.length)) {
+						if (overlap(x, y, width, height, ...treasure)) {
 							this.scores[i]++;
 							scored = true;
 						}
@@ -93,6 +87,13 @@ class Game {
 					for (const { ws } of this.players) {
 						ws.send(message);
 					}
+				}
+			}
+			for (let j = i + 1; j < t_arr.length; j++) {
+				if (overlap(...treasure, ...t_arr[j])) {
+					bounce(treasure, t_arr[j],
+						t_arr[j].position[0] - treasure.position[0],
+						t_arr[j].position[1] - treasure.position[1]);
 				}
 			}
 		}
@@ -360,11 +361,17 @@ class Treasure extends Mobile {
 	}
 
 	collide_with(player) {
-		if (!circle_touches_rect(...player.position, Player.radius,
-			...this.position, Treasure.length, Treasure.length)) return;
-		const x = player.position[0] - this.position[0] - Treasure.length / 2,
-			y = player.position[1] - this.position[1] - Treasure.length / 2;
-		bounce(x, y, Math.sqrt(x ** 2 + y ** 2), this, player);
+		if (circle_touches_rect(...player.position, Player.radius, ...this)) {
+			const x = player.position[0] - this.position[0] - Treasure.length / 2,
+				y = player.position[1] - this.position[1] - Treasure.length / 2;
+			bounce(this, player, x, y);
+		}
+	}
+
+	*[Symbol.iterator]() {
+		yield* this.position;
+		yield Treasure.length;
+		yield Treasure.length;
 	}
 
 	static length = 10;
@@ -385,6 +392,11 @@ function circle_touches_rect(x, y, r, x1, y1, width, height) {
 			(is_right ? x1 + width - x : x1 - x) ** 2 +
 			(is_below ? y1 + height - y : y1 - y) ** 2 < r ** 2;
 	}
+}
+
+function overlap(x1, y1, width1, height1, x2, y2, width2, height2) {
+	return overlap1d(x1, width1, x2, width2) &&
+		overlap1d(y1, height1, y2, height2);
 }
 
 function overlap1d(x1, width1, x2, width2) {
@@ -445,9 +457,13 @@ ws_server.on('connection', (ws, req) => {
 		else {
 			const mode = verify(id);
 			if (mode) {
-				const game = new Game(ws, username, false, mode);
-				private_games.set(id, game);
-				keys.set(game, id);
+				const world = mode === 'normal' ?
+					public_terrain : private_terrains.get(mode);
+				if (world) {
+					const game = new Game(ws, username, false, world);
+					private_games.set(id, game);
+					keys.set(game, id);
+				} else ws.close();
 			}
 		}
 	} else {
@@ -474,10 +490,10 @@ function collide_players(p1, p2) {
 	const x = (p2.position[0] - p1.position[0]),
 		y = (p2.position[1] - p1.position[1]);
 	const distance = Math.sqrt(x ** 2 + y ** 2);
-	if (distance <= Player.radius * 2) bounce(x, y, distance, p1, p2);
+	if (distance <= Player.radius * 2) bounce(p1, p2, x, y, distance);
 }
 
-function bounce(x, y, distance, p1, p2) {
+function bounce(p1, p2, x, y, distance = Math.sqrt(x ** 2 + y ** 2)) {
 	const norm_x = x / distance, norm_y = y / distance;
 	const speed = (p1.speed[0] - p2.speed[0]) * norm_x +
 		(p1.speed[1] - p2.speed[1]) * norm_y;
@@ -554,10 +570,10 @@ const private_terrains = new Map([
 		[ 12, 96, 72, 1 ],    [ 1116, 96, 72, 1 ],  [ 0, 0, 1200, 1 ],
 		[ 0, 0, 1, 600 ],     [ 1200, 0, 1, 600 ],  [ 0, 600, 1201, 1 ]
 	],
-		[[[10, 290, 20, 20]], [[1170, 290, 20, 20]]],
+		[[[10.5, 290.5, 20, 20]], [[1170.5, 290.5, 20, 20]]],
 		[[600.5 - Treasure.length / 2, 300.5 - Treasure.length / 2]],
 		['#ff0000', '#0000ff'],
-		[[[1170, 290, 20, 20]], [[10, 290, 20, 20]]]
+		[[[1170.5, 290.5, 20, 20]], [[10.5, 290.5, 20, 20]]]
 	)],
 	['4-square', new World([
 		[ 0, 0, 360, 1 ],    [ 0, 0, 1, 360 ],
@@ -571,5 +587,30 @@ const private_terrains = new Map([
 			'hsl(180, 100%, 40%)', 'hsl(270, 100%, 50%'],
 		[[[ 2, 1, 357, 1 ]], [[ 359, 2, 1, 357 ]],
 			[[ 2, 359, 357, 1]], [[ 1, 2, 1, 357 ]]]
+	)],
+	['many-treasures', new World([
+		[ 0, 0, 400, 1 ], [ 400, 0, 1, 340 ],  [ 0, 340, 401, 1 ],
+		[ 0, 0, 1, 340 ], [ 100, 40, 1, 260 ], [ 300, 40, 1, 260 ]
+	],
+		Array(2).fill([[ 180, 150, 20, 20 ]]),
+	[
+		[150.5 - Treasure.length / 2, 70.5 - Treasure.length / 2],
+		[200.5 - Treasure.length / 2, 70.5 - Treasure.length / 2],
+		[250.5 - Treasure.length / 2, 70.5 - Treasure.length / 2],
+		[150.5 - Treasure.length / 2, 120.5 - Treasure.length / 2],
+		[200.5 - Treasure.length / 2, 120.5 - Treasure.length / 2],
+		[250.5 - Treasure.length / 2, 120.5 - Treasure.length / 2],
+		[150.5 - Treasure.length / 2, 170.5 - Treasure.length / 2],
+		[200.5 - Treasure.length / 2, 170.5 - Treasure.length / 2],
+		[250.5 - Treasure.length / 2, 170.5 - Treasure.length / 2],
+		[150.5 - Treasure.length / 2, 220.5 - Treasure.length / 2],
+		[200.5 - Treasure.length / 2, 220.5 - Treasure.length / 2],
+		[250.5 - Treasure.length / 2, 220.5 - Treasure.length / 2],
+		[150.5 - Treasure.length / 2, 270.5 - Treasure.length / 2],
+		[200.5 - Treasure.length / 2, 270.5 - Treasure.length / 2],
+		[250.5 - Treasure.length / 2, 270.5 - Treasure.length / 2],
+	],
+		['#ff0000', '#0000ff'],
+		[[[ 45.5, 165.5, 10, 10 ]], [[ 345.5, 165.5, 10, 10 ]]]
 	)]
 ]);
