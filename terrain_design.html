@@ -62,7 +62,7 @@
 
 	document.addEventListener('keydown', ({ ctrlKey, key }) => {
 		if (ctrlKey && key === 'z') {
-			ctx.clearRect(...stuff.pop());
+			if (stuff.length) ctx.clearRect(...stuff.pop());
 			next_coords = null;
 		}
 	});
