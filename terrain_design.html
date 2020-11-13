@@ -40,7 +40,8 @@
 			const arr = Math.abs(x - x1) > Math.abs(y - y1) ?
 				[Math.min(x, x1), Math.min(y, y1), Math.abs(x - x1), 1] :
 				[Math.min(x, x1), Math.min(y, y1), 1, Math.abs(y - y1)];
-			ctx.fillRect(...arr);
+			ctx.fillRect(arr[0], arr[1],
+				arr[2] === 1 ? 3 : arr[2], arr[3] === 1 ? 3 : arr[3]);
 			stuff.push(arr);
 			next_coords = null;
 		} else next_coords = coords;
