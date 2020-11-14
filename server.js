@@ -283,9 +283,8 @@ class Player extends Mobile {
 	}
 
 	is_overlapping_wall() {
-		const [x, y] = this.position;
-		for (const [x1, y1, width, height] of this.game.world.walls) {
-			if (circle_touches_rect(x, y, Player.radius, x1, y1, width, height)) {
+		for (const wall of this.game.world.walls) {
+			if (circle_touches_rect(...this.position, Player.radius, ...wall)) {
 				return true;
 			}
 		}
@@ -638,5 +637,14 @@ const private_terrains = new Map([
 		['#ff0000', '#0000ff'],
 		[[[ 45.5, 165.5, 10, 10 ]], [[ 345.5, 165.5, 10, 10 ]]]
 	)],
-	
+	['enclosed', new World([
+		[ 20, 20, 320, 1 ],   [ 20, 20, 1, 260 ],  [ 0, 300, 441, 1 ],
+		[ 440, 0, 1, 300 ],   [ 40, 280, 380, 1 ], [ 240, 80, 1, 200 ],
+		[ 120, 100, 120, 1 ], [ 120, 180, 60, 1 ], [ 120, 100, 1, 140 ],
+		[ 20, 260, 180, 1 ],  [ 160, 140, 40, 1 ], [ 200, 120, 1, 141 ],
+		[ 160, 200, 40, 1 ],  [ 120, 240, 60, 1 ], [ 60, 60, 1, 180 ],
+		[ 60, 60, 180, 1 ],   [ 280, 20, 1, 240 ], [ 320, 260, 120, 1 ],
+		[ 320, 60, 1, 200 ],  [ 360, 0, 1, 220 ],  [ 400, 20, 1, 240 ],
+		[ 0, 0, 440, 1 ],     [ 0, 0, 1, 300 ]
+	], [[ 405.5, 150.5, 30, 100 ]])]
 ]);
