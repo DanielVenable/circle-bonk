@@ -20,8 +20,11 @@ const files = {
 
 class Game {
 	id = 0;
+	/** @type {Set<Player>} */
 	players = new Set;
+	/** @type {Set<Player>} */
 	dead_guys = new Set;
+	/** @type {Treasure[]} */
 	treasures = [];
 
 	constructor(ws, username, is_public, world = public_terrain) {
@@ -39,9 +42,9 @@ class Game {
 		new Player(ws, this, username);
 	}
 
-	send_to_all(type, from, send_to_me = false, send_username = false,
-			message = Symbol()) {
-		const obj = { type, message, id: from.id };
+	send_to_all(type, from, send_to_me = false, send_username = false, message) {
+		const obj = { type, id: from.id };
+		if (message !== undefined) obj.message = message;
 		if (send_username) {
 			obj.name = from.username;
 			obj.color = from.color;
@@ -59,14 +62,66 @@ class Game {
 	}
 
 	tick() {
-		const t_arr = [...this.treasures]
-		for (let i = 0; i < t_arr.length; i++) {
-			const treasure = t_arr[i];
-			add(treasure.position, treasure.speed);
-			treasure.speed[0] *= Game.friction;
-			treasure.speed[1] *= Game.friction;
-			treasure.bounce_off_walls();
-			if (this.world.teams) {
+		/** @type {[Number, Mobile, Boolean][]} */
+		let hit_list = [];
+
+		/** @param {Mobile} mobile */
+		const find_wall_hit = mobile => {
+			let min_time = Infinity, min_is_horizontal;
+			for (const wall of this.world.walls) {
+				for (const is_horizontal of [ true, false ]) {
+					const hit = mobile.hit_line(wall, is_horizontal);
+					if (hit < min_time) {
+						min_time = hit;
+						min_is_horizontal = is_horizontal;
+					}
+				}
+			}
+			if (min_is_horizontal !== undefined) {
+				hit_list.push([ min_time, mobile, min_is_horizontal ]);
+			}
+		}
+
+		for (const player of this.players) {
+			player.speed[0] += player.accel[0];
+			player.speed[1] += player.accel[1];
+		}
+
+		for (const mobile of this.mobiles()) {
+			mobile.speed[0] *= Game.friction;
+			mobile.speed[1] *= Game.friction;
+			find_wall_hit(mobile);
+		}
+
+		const dead = [];
+
+		while (hit_list.length) {
+			hit_list.sort(([a], [b]) => b - a);
+			const [ time, a, b ] = hit_list.pop();
+				hit_list = hit_list.filter(([, p, q]) =>
+					!([a, b].includes(p) || [a, b].includes(q)));
+			for (let i = 0; i < 2; i++) {
+				a.position[i] += a.speed[i] * time;
+			}
+			if (a instanceof Player) {
+				dead.push(a);
+				this.players.delete(a);
+			} else {
+				a.time_left = 1 - time;
+				a.speed[+b] *= -1;
+				find_wall_hit(a);
+			}
+		}
+
+		for (const mobile of this.mobiles()) {
+			mobile.position[0] += mobile.speed[0] * mobile.time_left;
+			mobile.position[1] += mobile.speed[1] * mobile.time_left;
+			mobile.time_left = 1;
+		}
+
+		if (this.world.teams) {
+			for (let i = 0; i < this.treasures.length; i++) {
+				const treasure = this.treasures[i];
 				let scored = false;
 				for (let i = 0; i < this.world.goals.length; i++) {
 					for (const [x, y, width, height] of this.world.goals[i]) {
@@ -87,77 +142,32 @@ class Game {
 					for (const { ws } of this.players) {
 						ws.send(message);
 					}
-				}
-			}
-			for (let j = i + 1; j < t_arr.length; j++) {
-				if (overlap(...treasure, ...t_arr[j])) {
-					bounce(treasure, t_arr[j],
-						t_arr[j].position[0] - treasure.position[0],
-						t_arr[j].position[1] - treasure.position[1]);
+					return;
 				}
 			}
 		}
 
-		const arr = [...this.players];
-		for (let i = 0; i < arr.length; i++) {
-			const player = arr[i];
-			add(player.position, player.speed);
-
-			const x_min = player.position[0] - Player.min_show_player_x,
-				x_max = player.position[0] + Player.min_show_player_x,
-				y_min = player.position[1] - Player.min_show_player_y,
-				y_max = player.position[1] + Player.min_show_player_y;
-
-			function is_on_screen(player) {
-				return player.position[0] > x_min && player.position[0] < x_max &&
-					player.position[1] > y_min && player.position[1] < y_max;
-			}
-
-			for (let j = i + 1; j < arr.length; j++) {
-				if (is_on_screen(arr[j])) {
-					player.on_screen.push([ arr[j].id, arr[j].position ]);
-					arr[j].on_screen.push([ player.id, player.position ]);
-					collide_players(player, arr[j]);
-				}
-			}
-
-			for (const dead of this.dead_guys) {
-				if (is_on_screen(dead)) {
-					dead.on_screen.push([ player.id, player.position ]);
-				}
-			}
-
-			this.send_data(player, true);
-
-			if (player.is_overlapping_wall()) {
-				this.send_to_all('die', player, true);
-				this.players.delete(player);
-				this.dead_guys.add(player);
-			} else {
-				add(player.speed, player.accel);
-				player.speed[0] *= Game.friction;
-				player.speed[1] *= Game.friction;
+		const mobiles = [...this.mobiles()];
+		for (let i = 0; i < mobiles.length; i++) {
+			for (let j = i + 1; j < mobiles.length; j++) {
+				collide(mobiles[i], mobiles[j]);
 			}
 		}
 
-		for (const dead of this.dead_guys) {
-			this.send_data(dead, false);
-		}
-	}
-
-	send_data(player, send_pos) {
-		const obj = new Position_data(player.on_screen, send_pos && player.position);
-		
-		for (const treasure of this.treasures) {
-			if (player.is_treasure_on_screen(treasure)) {
-				treasure.collide_with(player);
-				obj.treasures.push(treasure.position);
-			}
+		const players = [...this.players];
+		for (const player of this.players) {
+			player.send_data(players, true);
 		}
 
-		player.ws.send(JSON.stringify(obj));
+		for (const player of this.dead_guys) {
+			player.send_data(players, false);
+		}
 
-		player.on_screen = [];
+		for (const player of dead) {
+			this.dead_guys.add(player);
+			player.send_data(players, true);
+			this.send_to_all('die', player, true);
+		}
 	}
 
 	remove(player) {
@@ -170,6 +180,11 @@ class Game {
 	*all_players() {
 		yield* this.players;
 		yield* this.dead_guys;
+	}
+
+	*mobiles() {
+		yield* this.players;
+		yield* this.treasures;
 	}
 
 	get_color() {
@@ -206,28 +221,70 @@ class Game {
 	static friction = 0.95;
 }
 
-class Position_data {
-	type = 'position';
-	treasures = [];
-
-	constructor(message, pos) {
-		this.message = message;
-		if (pos) this.pos = pos;
-	}
-}
-
 class Mobile {
 	speed = [0, 0];
+	time_left = 1;
 
 	constructor(game, x = 0, y = 0) {
 		this.position = [x, y];
 		this.game = game;
 	}
+
+	hit_line([ x, y, w, h ], is_horizontal) {
+		const i = +is_horizontal;
+
+		if (this.speed[i] === 0) return;
+
+		if (is_horizontal) {
+			[x, y] = [y, x];
+			[h, w] = [w, h];
+		}
+
+		let edge, can_hit_side = true;
+		if (this.speed[i] > 0) {
+			edge = this.position[i] +
+				(this instanceof Treasure ? Treasure.length : Player.radius);
+			if (edge + this.speed[i] * this.time_left < x || edge > x) {
+				can_hit_side = false;
+			}
+		} else {
+			edge = this.position[i] -
+				(this instanceof Treasure ? 0 : Player.radius);
+			x += w;
+			if (edge + this.speed[i] * this.time_left > x || edge < x) {
+				can_hit_side = false;
+			}
+		}
+			
+
+		const ans = (x - edge) / this.speed[i];
+		const new_y = this.position[1-i] + this.speed[1-i] * ans;
+		if (this instanceof Player) {
+			if (new_y <= y + h && new_y >= y) return can_hit_side ? ans : undefined;
+			let py = y;
+			let min;
+			for (let is_first = true; is_first; is_first = false) {
+				const dist = Math.hypot(x - this.position[i], py - this.position[1-i]);
+				const y_diff = py - this.position[1-i];
+				const x_diff = x - this.position[i];
+				const direction = Math.atan(this.speed[1-i] / this.speed[i]);
+				const angle = direction - Math.atan(y_diff / x_diff);
+				const altitude = Math.sin(angle) * dist;
+				const inside = Math.sqrt(Player.radius ** 2 - altitude ** 2);
+				const answer = (Math.cos(angle) * dist - inside) / Math.hypot(...this.speed);
+				if (answer <= this.time_left && answer >= 0) {
+					if (is_first) min = answer;
+					else min = Math.min(min, answer);
+				}
+			}
+			return min;
+		} else if (new_y <= y + h && new_y + Treasure.length / 2 >= y && can_hit_side) {
+			return ans;
+		}
+	}
 }
 
 class Player extends Mobile {
-	on_screen = [];
-
 	constructor(ws, game, username) {
 		const color = game.get_color();
 		super(game, ...game.get_position(color));
@@ -246,7 +303,7 @@ class Player extends Mobile {
 			if (data.type === 'message' && !game.is_public) {
 				game.send_to_all('message', this, false, false, String(data.message));
 			} else if (data.type === 'position') {
-				const norm = Math.sqrt(data.x ** 2 + data.y ** 2);
+				const norm = Math.hypot(data.x, data.y);
 				if (isNaN(norm)) return;
 				this.accel = [
 					data.x * Player.accel / norm || 0,
@@ -282,15 +339,6 @@ class Player extends Mobile {
 		}
 	}
 
-	is_overlapping_wall() {
-		for (const wall of this.game.world.walls) {
-			if (circle_touches_rect(...this.position, Player.radius, ...wall)) {
-				return true;
-			}
-		}
-		return false;
-	}
-
 	start() {
 		this.accel = [0, 0];
 
@@ -308,62 +356,47 @@ class Player extends Mobile {
 		this.game.send_to_all('player', this, false, true);
 	}
 	
-	is_treasure_on_screen(treasure) {
-		return overlap1d(this.position[0] - Player.half_board_width,
-				Player.half_board_width * 2,
-				treasure.position[0],
-				Treasure.length) &&
-			overlap1d(this.position[1] - Player.half_board_height,
-				Player.half_board_height * 2,
-				treasure.position[1],
-				Treasure.length);
+	is_on_screen(mobile) {
+		return overlap(
+			this.position[0] - Player.board_width / 2,
+			this.position[1] - Player.board_height / 2,
+			Player.board_width, Player.board_height,
+			...(mobile instanceof Treasure ? mobile : [
+				mobile.position[0] - Player.radius,
+				mobile.position[1] - Player.radius,
+				Player.radius * 2,
+				Player.radius * 2
+			]));
+	}
+
+	send_data(players, send_pos) {
+		const obj = {
+			type: 'position',
+			treasures: this.game.treasures
+				.filter(t => this.is_on_screen(t))
+				.map(({ position }) => position),
+			message: players
+				.filter(p => this !== p && this.is_on_screen(p))
+				.map(({ id, position }) => [id, position])
+		}
+		if (send_pos) obj.pos = this.position;
+		this.ws.send(JSON.stringify(obj));
 	}
 
 	static radius = 5;
 	static accel = 0.3;
 	static max_name_length = 30;
-	static half_board_width = 150;
-	static half_board_height = 100;
-	static min_show_player_x = Player.half_board_width + Player.radius;
-	static min_show_player_y = Player.half_board_height + Player.radius;
+	static board_width = 300;
+	static board_height = 200;
 }
 Player.prototype.mass = 1;
 
 class Treasure extends Mobile {
-	bounce_off_walls() {
-		const [x, y] = this.position;
-		const center_x = x + Treasure.length / 2,
-			center_y = y + Treasure.length / 2;
-		for (const [x2, y2, width, height] of this.game.world.walls) {
-			if (overlap1d(x, Treasure.length, x2, width) &&
-					overlap1d(y, Treasure.length, y2, height)) {
-				const b1 = this.bounce(y2, height, center_y, x2, width, center_x, 1);
-				const b0 = this.bounce(x2, width, center_x, y2, height, center_y, 0);
-				if (b1) this.speed[1] *= -1;
-				if (b0) this.speed[0] *= -1;
-			}
-		}
-	}
-
-	bounce(a2, a_length, center_a, b2, b_length, center_b, num) {
-		const multiplier = this.speed[num] < 0 ? 1 : -1;
-		const wall_side_y = this.speed[num] < 0 ? a2 + a_length : a2;
-		const y_dist = (wall_side_y - center_a) * multiplier +
-			Treasure.length / 2;
-		const x_dist = y_dist * this.speed[1 - num] / this.speed[num];
-		const x_pos = center_b + x_dist * multiplier - Treasure.length / 2;
-		if (overlap1d(x_pos, Treasure.length, b2, b_length)) {
-			const y_pos = wall_side_y - (this.speed[num] < 0 ? 0 : Treasure.length);
-			this.position = num ? [x_pos, y_pos] : [y_pos, x_pos];
-			return true;
-		}
-	}
-
-	collide_with(player) {
+	bounce_off_player(player) {
 		if (circle_touches_rect(...player.position, Player.radius, ...this)) {
-			const x = player.position[0] - this.position[0] - Treasure.length / 2,
-				y = player.position[1] - this.position[1] - Treasure.length / 2;
-			bounce(this, player, x, y);
+			bounce(player, this,
+				this.position[0] - player.position[0] + Treasure.length / 2,
+				this.position[1] - player.position[1] + Treasure.length / 2);
 		}
 	}
 
@@ -479,29 +512,34 @@ function random_color() {
 	return `hsl(${360 * Math.random()},100%,${Math.random() * 50 + 20}%)`;
 }
 
-function add(v1, v2) {
-	for (let i = 0; i < v1.length; i++) {
-		v1[i] += v2[i];
+function collide(m1, m2) {
+	if (m1 instanceof Player) {
+		if (m2 instanceof Player) {
+			const x = m2.position[0] - m1.position[0],
+				y = m2.position[1] - m1.position[1],
+				dist = Math.hypot(x, y);
+			if (dist <= Player.radius * 2) bounce(m1, m2, x, y, dist); 
+		} else m2.bounce_off_player(m1);
+	} else {
+		if (m2 instanceof Treasure) {
+			if (overlap(...m1, ...m2)) {
+				bounce(m1, m2, m2.position[0] - m1.position[0],
+					m2.position[1] - m1.position[1]);
+			}
+		} else m1.bounce_off_player(m2);
 	}
 }
 
-function collide_players(p1, p2) {
-	const x = (p2.position[0] - p1.position[0]),
-		y = (p2.position[1] - p1.position[1]);
-	const distance = Math.sqrt(x ** 2 + y ** 2);
-	if (distance <= Player.radius * 2) bounce(p1, p2, x, y, distance);
-}
-
-function bounce(p1, p2, x, y, distance = Math.sqrt(x ** 2 + y ** 2)) {
+function bounce(m1, m2, x, y, distance = Math.hypot(x, y)) {
 	const norm_x = x / distance, norm_y = y / distance;
-	const speed = (p1.speed[0] - p2.speed[0]) * norm_x +
-		(p1.speed[1] - p2.speed[1]) * norm_y;
+	const speed = (m1.speed[0] - m2.speed[0]) * norm_x +
+		(m1.speed[1] - m2.speed[1]) * norm_y;
 	if (speed <= 0) return;
-	const impulse = 2 * speed / (p1.mass + p2.mass);
-	p1.speed[0] -= impulse * p2.mass * norm_x;
-	p1.speed[1] -= impulse * p2.mass * norm_y;
-	p2.speed[0] += impulse * p1.mass * norm_x;
-	p2.speed[1] += impulse * p1.mass * norm_y;
+	const impulse = 2 * speed / (m1.mass + m2.mass);
+	m1.speed[0] -= impulse * m2.mass * norm_x;
+	m1.speed[1] -= impulse * m2.mass * norm_y;
+	m2.speed[0] += impulse * m1.mass * norm_x;
+	m2.speed[1] += impulse * m1.mass * norm_y;
 }
 
 function random_array_elem(arr) {
