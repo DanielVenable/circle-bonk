@@ -139,7 +139,7 @@ class Game {
 						type: 'score',
 						message: this.scores
 					});
-					for (const { ws } of this.players) {
+					for (const { ws } of this.all_players()) {
 						ws.send(message);
 					}
 					return;
