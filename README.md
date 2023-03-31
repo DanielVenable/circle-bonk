@@ -50,7 +50,7 @@ Choose a new display name or just hit enter to start again.
 
 # Setup
 
-Click [here](https://circle-bonk.herokuapp.com) to play the game.
+Click [here](https://circle-bonk.onrender.com) to play the game.
 
 Or, you can run the app locally:
 1. Make sure you have node.js installed.
