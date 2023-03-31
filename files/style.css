@@ -1,0 +1,70 @@
+#chatbox span {
+    font-style: italic;
+}
+
+#play:not([hidden]) {
+    display: flex;
+    justify-content: center;
+}
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+#chatbox {
+    border: 1px solid black;
+    display: flex;
+    flex-direction: column-reverse;
+    position: absolute;
+    top: 20%;
+    bottom: 20px;
+    left: 0;
+    right: 0;
+    overflow: auto;
+}
+
+#info {
+    border: 1px solid black;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100%;
+    overflow: auto;
+}
+
+ol {
+    margin: 0;
+}
+
+#info > div {
+    margin: 0.2em;
+}
+
+#chatinput + #info {
+    height: 20%;
+}
+
+#chatcontainer {
+    position: relative;
+    width: 25%;
+}
+
+#canvas {
+    width: 75%;
+    border: 5px solid rgb(0, 255, 0);
+}
+
+#chatinput {
+    position: absolute;
+    bottom: 0;
+    width: -moz-available;
+    width: -webkit-fill-available;
+}
+
+#chatbox p {
+    margin: 0.5em;
+}

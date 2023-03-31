@@ -1,7 +1,5 @@
 'use strict';
 
-process.chdir(__dirname);
-
 const { format } = require('util'),
 	{ Server } = require('ws'),
 	{ createServer } = require('http'),
@@ -10,10 +8,14 @@ const { format } = require('util'),
 	{ sign, verify } = require('./code-generate'),
 	port = +process.env.PORT || 3000;
 
+process.chdir(__dirname + '/files');
+
 const files = {
 	game: readFile('game.html').then(String),
 	home: readFile('home-page.html').then(String),
 	favicon: readFile('favicon.svg').then(String),
+	style: readFile('style.css').then(String),
+	script: readFile('game.js').then(String),
 	chatbox: readFile('chatbox.html').then(String),
 	no_exist: readFile('no-exist.html').then(String)
 }
@@ -452,6 +454,12 @@ const server = createServer(async (req, res) => {
 		case '/favicon.svg':
 			res.setHeader('Content-Type', 'image/svg+xml');
 			return res.end(format(await files.favicon, random_color()));
+		case '/style.css':
+			res.setHeader('Content-Type', 'text/css');
+			return res.end(await files.style);
+		case '/game.js':
+			res.setHeader('Content-Type', 'text/javascript');
+			return res.end(await files.script);
 		default:
 			let regexp;
 			if (regexp = req.url.match(/^\/code\/([\w\-]+)$/)) {

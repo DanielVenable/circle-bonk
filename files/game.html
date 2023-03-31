@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="description" content="
+		A multiplayer game where players use the arrow keys to navigate a
+		maze and knock other players into walls.">
+	<link rel="icon" href="/favicon.svg" sizes="any" type="image/svg+xml">
+	<link rel="stylesheet" href="/style.css">
+	<script src="/game.js" type="module" defer></script>
+	<title>Circle Bonk</title>
+</head>
+
+<body>
+	<noscript>
+		You must enable javascript to play this game.
+	</noscript>
+	<p id="start">
+		<label>Choose a display name:
+			<input id="displayname" maxlength="30">
+		</label>
+	</p>
+	<div id="play" hidden>
+		<canvas width="3000" height="2000" id="canvas"></canvas>
+		<div id="chatcontainer">
+			%s
+			<div id="info">
+				<div class="margin" id="scoreboard" hidden>
+					Score: <span id="scores"></span>
+				</div>
+				<div class="margin">
+					Leaderboard:
+				</div>
+				<ol id="players"></ol>
+			</div>
+		</div>
+	</div>
+</body>
+
+</html>
