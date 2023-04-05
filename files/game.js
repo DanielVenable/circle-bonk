@@ -1,5 +1,5 @@
 const [chatbox, chatinput, usernameinput, play,
-        start_screen, canvas, player_list, score_list, scoreboard] =
+        startScreen, canvas, playerList, scoreList, scoreboard] =
     ['chatbox', 'chatinput', 'displayname', 'play',
         'start', 'canvas', 'players', 'scores', 'scoreboard']
         .map(document.getElementById.bind(document)),
@@ -9,20 +9,21 @@ const [chatbox, chatinput, usernameinput, play,
         'ArrowDown',
         'ArrowRight'
     ]),
-    keys_down = new Set,
+    keysDown = new Set,
     players = new Map,
-    dead_guys = new Set,
+    dead = new Set,
     ctx = canvas.getContext('2d'),
     scale = 10;
 
-let on_screen = new Set,
-    treasure_pos = [],
-    ws, my_id,
+let onScreen = new Set,
+    treasurePos = [],
+    ws, myId,
     walls = [],
     teams = [],
     goals = [],
     angle = 0,
-    playing = false;
+    playing = false,
+    isTouching = false;
 
 ctx.imageSmoothingEnabled = false;
 ctx.textAlign = 'center';
@@ -50,7 +51,7 @@ function start() {
         }));
     }
     play.hidden = false;
-    start_screen.hidden = true;
+    startScreen.hidden = true;
     resize();
 }
 
@@ -64,7 +65,9 @@ function setup() {
         }/?username=${
             encodeURIComponent(
                 localStorage.display_name = usernameinput.value)
-        }%s`);
+        }&id=${
+            document.body.dataset.game
+        }`);
 
     document.addEventListener('keydown', e => handle_key(e, true));
     document.addEventListener('keyup', e => handle_key(e, false));
@@ -80,15 +83,15 @@ function setup() {
                 set_property(id, 'color', color);
                 update_player_list();
             break; case 'position':
-                on_screen = new Set();
-                if (pos) on_screen.add(my_id);
-                treasure_pos = treasures;
+                onScreen = new Set();
+                if (pos) onScreen.add(myId);
+                treasurePos = treasures;
                 for (const [id, pos] of message) {
-                    on_screen.add(id);
+                    onScreen.add(id);
                     set_property(id, 'position', pos);
                 }
                 if (pos) {
-                    set_property(my_id, 'position', pos);
+                    set_property(myId, 'position', pos);
                     ctx.setTransform(scale, 0, 0, scale,
                         canvas.width  / 2 - pos[0] * scale,
                         canvas.height / 2 - pos[1] * scale);
@@ -98,7 +101,7 @@ function setup() {
                 update_player_list();
             break; case 'start':
                 walls = message;
-                my_id = id;
+                myId = id;
                 set_property(id, 'username', usernameinput.value);
             break; case 'goal':
                 teams = color;
@@ -106,19 +109,19 @@ function setup() {
             break; case 'die':
                 const player = players.get(id);
                 player.death_date = Date.now();
-                dead_guys.add(player);
+                dead.add(player);
                 players.delete(id);
-                on_screen.delete(id);
-                if (id === my_id) {
+                onScreen.delete(id);
+                if (id === myId) {
                     playing = false;
-                    start_screen.hidden = false;
+                    startScreen.hidden = false;
                     usernameinput.select();
                     resize();
                 }
                 update_player_list();
-                setTimeout(() => dead_guys.delete(player), 1000);
+                setTimeout(() => dead.delete(player), 1000);
             break; case 'leave':
-                on_screen.delete(id);
+                onScreen.delete(id);
             break; case 'score':
                 update_score_list(message);
             break; default:
@@ -170,11 +173,11 @@ function setup() {
         ctx.globalAlpha = 1;
 
         ctx.fillStyle = '#ffff00';
-        for (const treasure of treasure_pos) {
+        for (const treasure of treasurePos) {
             ctx.fillRect(...treasure, 10, 10);
         }
 
-        const me = players.get(my_id);
+        const me = players.get(myId);
         if (me && me.position) {
             const [x, y] = me.position;
             ctx.beginPath();
@@ -184,10 +187,10 @@ function setup() {
         }
 
         function* iterator() {
-            for (const id of on_screen) {
+            for (const id of onScreen) {
                 yield players.get(id);
             }
-            for (const player of dead_guys) {
+            for (const player of dead) {
                 ctx.globalAlpha = 1 - (Date.now() - player.death_date) / 1000;
                 yield player;
             }
@@ -196,12 +199,13 @@ function setup() {
 
     function handle_key(event, is_down) {
         if (keys.has(event.code)) {
-            keys_down[is_down ? 'add' : 'delete'](event.code);
+            keysDown[is_down ? 'add' : 'delete'](event.code);
             if (!playing) return;
             event.preventDefault();
             let accel = 0;
-            if (keys_down.has('ArrowUp')) accel++;
-            if (keys_down.has('ArrowDown')) accel--;
+            if (isTouching) accel++;
+            if (keysDown.has('ArrowUp')) accel++;
+            if (keysDown.has('ArrowDown')) accel--;
             ws.send(JSON.stringify({
                 type: 'position',
                 x: Math.cos(angle) * accel,
@@ -213,29 +217,29 @@ function setup() {
     }
 
     function update_player_list() {
-        player_list.textContent = '';
+        playerList.textContent = '';
         for (const { username } of players.values()) {
             if (username === undefined) continue;
             const elem = document.createElement('li');
             elem.textContent = username;
-            player_list.appendChild(elem);
+            playerList.appendChild(elem);
         }
     }
 
     function update_score_list(score) {
         scoreboard.hidden = false;
-        score_list.textContent = '';
+        scoreList.textContent = '';
         for (let i = 0; i < teams.length; i++) {
             const elem = document.createElement('span');
             elem.textContent = score[i] + ' ';
             elem.style.color = teams[i];
-            score_list.appendChild(elem);
+            scoreList.appendChild(elem);
         }
     }
 
     setInterval(() => {
-        if (keys_down.has('ArrowLeft'))  angle -= Math.PI / 20;
-        if (keys_down.has('ArrowRight')) angle += Math.PI / 20;
+        if (keysDown.has('ArrowLeft'))  angle -= Math.PI / 20;
+        if (keysDown.has('ArrowRight')) angle += Math.PI / 20;
     }, 50);
 
     setInterval(update, 50);
@@ -263,6 +267,38 @@ function setup() {
         elem.appendChild(name);
         elem.insertAdjacentText('beforeend', text);
         chatbox.prepend(elem);
+    }
+
+    canvas.addEventListener('touchstart', touch);
+    canvas.addEventListener('touchmove', touch);
+    document.addEventListener('touchend', untouch);
+    document.addEventListener('touchcancel', untouch);
+
+    function touch(event) {
+        const touch = event.changedTouches[0];
+        const rect = this.getBoundingClientRect();
+        const x = touch.clientX - rect.left - rect.width / 2;
+        const y = touch.clientY - rect.top - rect.height / 2;
+
+        if (x > 0) {
+            angle = Math.atan(y / x);
+        } else {
+            angle = Math.PI + Math.atan(y / x);
+        }
+
+        isTouching = true;
+
+        ws.send(JSON.stringify({
+            type: 'position', x, y
+        }));
+    }
+
+    function untouch() {
+        isTouching = false;
+
+        ws.send(JSON.stringify({
+            type: 'position', x: 0, y: 0
+        }));
     }
 }
 
