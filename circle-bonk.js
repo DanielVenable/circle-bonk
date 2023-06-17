@@ -28,6 +28,12 @@ export class Game {
 			}
 		}
 		new Player(ws, this, username);
+
+		ws.on('close', () => {
+			if (this.players.size === 0) {
+				this.destroy();
+			}
+		})
 	}
 
 	sendToAll(type, from, sendToMe = false, sendUsername = false, message) {
@@ -447,8 +453,10 @@ export class Bot extends Circle {
 
 	/** decides how to move */
 	think() {
+		// chase any players found
 		let potentialHypot = 100;
 		let potentialDiff = [0, 0];
+		let foundPlayer = false;
 		for (const player of this.game.players) {
 			const xDiff = player.position[0] - this.position[0];
 			const yDiff = player.position[1] - this.position[1];
@@ -456,9 +464,62 @@ export class Bot extends Circle {
 			if (hypot < potentialHypot) {
 				potentialHypot = hypot;
 				potentialDiff = [xDiff, yDiff];
+				foundPlayer = true;
 			}
 		}
-		this.accel = potentialDiff.map(diff => Circle.accel * diff / potentialHypot);
+
+		if (foundPlayer) {
+			this.accel = potentialDiff.map(diff => Circle.accel * diff / potentialHypot);
+		} else {
+			// if no player is found, avoid walls
+			const hits = [
+				false, false,
+				false, false
+			];
+			const visionRadius = 30;
+			const hitRects = [
+				[this.position[0] - visionRadius, this.position[1] - visionRadius, visionRadius, visionRadius],
+				[this.position[0], this.position[1] - visionRadius, visionRadius, visionRadius],
+				[this.position[0] - visionRadius, this.position[1], visionRadius, visionRadius],
+				[this.position[0], this.position[1], visionRadius, visionRadius],
+			];
+
+			for (const wall of this.game.world.walls) {
+				for (let i = 0; i < 4; i++) {
+					if (!hits[i] && overlap(...wall, ...hitRects[i])) {
+						hits[i] = true;
+					}
+				}
+			}
+
+			const accel = [0, 0];
+
+			if (hits[0]) {
+				accel[0]--;
+				accel[1]--;
+			}
+			if (hits[1] || hits[3]) {
+				accel[0]++;
+				accel[1]--;
+			}
+			if (hits[2]) {
+				accel[0]--;
+				accel[1]++;
+			}
+			if (hits[3]) {
+				accel[0]++
+				accel[1]--;
+			}
+
+			if (hits.includes(true)) {
+				const hypot = Math.hypot(...accel);
+				this.accel = hypot === 0 ? [0, 0] : accel.map(a => a / hypot);
+			} else {
+				// move in a random direction
+				const angle = Math.random() * Math.PI * 2;
+				this.accel = [Math.cos(angle), Math.sin(angle)];
+			}
+		}
 	}
 
 	static thinkTime = 20;
