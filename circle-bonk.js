@@ -207,15 +207,20 @@ export class Game {
 
 	/**
 	 * gets the spawn position for a circle
-	 * @param {Circle} circle 
+	 * @param {String} color the circle's color
 	 * @returns {[Number]} the spawn position
 	 */
-	getPosition(circle) {
+	getPosition(color) {
 		if (this.world.teams) {
 			return randomPosition(
-				this.world.spawn[this.world.teams.indexOf(circle.color)]);
+				this.world.spawn[this.world.teams.indexOf(color)]);
 		} else {
-			return randomPosition(this.world.spawn);
+			let pos;
+			do {
+				pos = randomPosition(this.world.spawn);
+			} while (!this.world.walls.every(
+				wall => !circleTouchesRect(...pos, Circle.radius, ...wall)));
+			return pos;
 		}
 	}
 
@@ -228,6 +233,7 @@ class Mobile {
 	speed = [0, 0];
 	timeLeft = 1;
 
+	/** @param {Game} game */
 	constructor(game, x = 0, y = 0) {
 		this.position = [x, y];
 		this.game = game;
@@ -303,11 +309,12 @@ class Circle extends Mobile {
 
 	/** resets position and speed */
 	restart() {
-		this.position = this.game.getPosition(this);
+		this.position = this.game.getPosition(this.color);
 		this.speed = [0, 0];
 	}
 
 	static radius = 5;
+	static accel = 0.3;
 }
 Circle.prototype.mass = 1;
 
@@ -330,8 +337,8 @@ export class Player extends Circle {
 				const norm = Math.hypot(data.x, data.y);
 				if (isNaN(norm)) return;
 				this.accel = [
-					data.x * Player.accel / norm || 0,
-					data.y * Player.accel / norm || 0];
+					data.x * Circle.accel / norm || 0,
+					data.y * Circle.accel / norm || 0];
 			} else if (data.type === 'restart') {
 				this.username = String(data.username);
 				game.dead.delete(this);
@@ -406,7 +413,6 @@ export class Player extends Circle {
 		this.ws.send(JSON.stringify(obj));
 	}
 
-	static accel = 0.3;
 	static maxNameLength = 30;
 	static boardWidth = 300;
 	static boardHeight = 200;
@@ -441,7 +447,18 @@ export class Bot extends Circle {
 
 	/** decides how to move */
 	think() {
-		
+		let potentialHypot = 100;
+		let potentialDiff = [0, 0];
+		for (const player of this.game.players) {
+			const xDiff = player.position[0] - this.position[0];
+			const yDiff = player.position[1] - this.position[1];
+			const hypot = Math.hypot(xDiff, yDiff);
+			if (hypot < potentialHypot) {
+				potentialHypot = hypot;
+				potentialDiff = [xDiff, yDiff];
+			}
+		}
+		this.accel = potentialDiff.map(diff => Circle.accel * diff / potentialHypot);
 	}
 
 	static thinkTime = 20;
