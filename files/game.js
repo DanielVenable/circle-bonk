@@ -156,7 +156,7 @@ function setup() {
 
         for (const { position, color } of iterator()) {
             if (!position) continue;
-            ctx.fillStyle = color || '#000000';
+            ctx.fillStyle = color ?? '#666666';
             ctx.beginPath();
             ctx.arc(...position, 5, 0, 2 * Math.PI);
             ctx.fill();
@@ -166,7 +166,7 @@ function setup() {
 
         for (const { username, position, color } of iterator()) {
             if (!position || !username) continue;
-            ctx.fillStyle = color || '#000000';
+            ctx.fillStyle = color ?? '#000000';
             ctx.fillText(username, position[0], position[1] - 6);
         }
 
