@@ -26,6 +26,6 @@
   },
   "homepage": "https://github.com/DanielVenable/circle-bonk#readme",
   "dependencies": {
-    "ws": "7.5.9"
+    "ws": "^7.5.10"
   }
 }
